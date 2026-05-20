@@ -1,8 +1,8 @@
-# Финальный проект 2 семестра - Игра на Pygame: "TheFastestCar"
+# TheFastestCar - Игра на Pygame
 
 ### **Бесконечная езда по шоссе с видом сверху.**
 
-![Фото с демкой игры](images\TheFastetsCar_demo.jpg)
+![Фото с демкой игры](images/TheFastetsCar_demo.jpg)
 
 ## Описание
 

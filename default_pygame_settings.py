@@ -3,9 +3,9 @@ import pygame
 
 pygame.init()
 
-WIGHT, HEIGHT = 1280, 720
+WIDTH, HEIGHT = 1280, 720
 
-display = pygame.display.set_mode((WIGHT, HEIGHT))
+display = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("TheFastestCar")
 clock = pygame.time.Clock()
 

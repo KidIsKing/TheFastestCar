@@ -22,7 +22,7 @@ ROAD_SCROLL_SPEED = 5
 player_img = pygame.image.load(ASSETS["player"])
 player_img = pygame.transform.rotate(player_img, 90)
 player_ratio = player_img.get_width() / player_img.get_height()
-player_img = pygame.transform.smoothscale(player_img, (player_img.get_width() * 0.3, player_img.get_width() * 0.3))
+player_img = pygame.transform.smoothscale(player_img, (player_img.get_width() * 0.3, player_img.get_width() * 0.5))
 
 PLAYER_START_X = WIDTH // 2 - 90
 PLAYER_START_Y = HEIGHT - player_img.get_height() - 20
@@ -37,12 +37,12 @@ ENEMY_SPEED = 5
 last_spawn_time = pygame.time.get_ticks()
 
 enemy_img = pygame.image.load(ASSETS["enemy"])
-enemy_img = pygame.transform.smoothscale(enemy_img, (enemy_img.get_width() * 0.15, enemy_img.get_width() * 0.15))
+enemy_img = pygame.transform.smoothscale(enemy_img, (enemy_img.get_width() * 0.15, enemy_img.get_width() * 0.25))
 
 enemies = []
 
 fire_img = pygame.image.load(ASSETS["fire"])
-fire_img = pygame.transform.smoothscale(fire_img, (400, 200))
+fire_img = pygame.transform.smoothscale(fire_img, (fire_img.get_width() * 0.5, fire_img.get_width() * 0.5))
 
 
 pygame.init()

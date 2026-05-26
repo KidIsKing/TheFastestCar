@@ -50,14 +50,38 @@ class Player:
 
 
 class Enemy:
-    def __init__(self, image, x, y, speed):
+    def __init__(self, image, x, y, speed, left_bound, right_bound):
         self.image = image
         self.rect = self.image.get_rect(topleft=(x, y))
         self.speed = speed
+        self.left_bound = left_bound
+        self.right_bound = right_bound
+        self.float_x = float(self.rect.x)
+        self.drift_speed = random.choice([-1, 1]) * random.uniform(0.08, 0.22)
+        self.drift_target_speed = self.drift_speed
+        self.next_drift_change = pygame.time.get_ticks() + random.randint(1200, 2600)
         self.scored = False
 
     def update(self, world_speed=0):
         self.rect.y += self.speed + world_speed
+
+        now = pygame.time.get_ticks()
+        if now >= self.next_drift_change:
+            self.next_drift_change = now + random.randint(1200, 2600)
+            self.drift_target_speed = random.choice([-1, 1]) * random.uniform(0.08, 0.28)
+
+        self.drift_speed += (self.drift_target_speed - self.drift_speed) * 0.6
+        self.float_x += self.drift_speed
+        self.rect.x = int(round(self.float_x))
+
+        if self.rect.left <= self.left_bound:
+            self.rect.left = self.left_bound
+            self.float_x = float(self.rect.x)
+            self.drift_target_speed = abs(self.drift_target_speed)
+        elif self.rect.right >= self.right_bound:
+            self.rect.right = self.right_bound
+            self.float_x = float(self.rect.x)
+            self.drift_target_speed = -abs(self.drift_target_speed)
 
     def draw(self, surface):
         surface.blit(self.image, self.rect)
@@ -117,10 +141,11 @@ class Game:
         self.score = 0
         self.best_score = self.start_score
         self.last_spawn_time = pygame.time.get_ticks()
-        self.spawn_interval = 2000
+        self.base_spawn_interval = 2200
+        self.min_spawn_interval = 700
         self.player_speed = 2
         self.start_speed = self.player_speed
-        self.max_speed = 30
+        self.max_speed = 15
         self.min_speed = 2
         self.speed_acceleration = 0.07
         self.speed_coast_deceleration = 0.03
@@ -140,7 +165,14 @@ class Game:
         max_x = WIDTH // 2 + self.road.image.get_width() // 2 - self.player.rect.width - 220
         x = random.randint(min_x, max_x)
         y = -self.enemy_image.get_height()
-        self.enemies.append(Enemy(self.enemy_image, x, y, self.enemy_speed))
+        self.enemies.append(Enemy(self.enemy_image, x, y, self.enemy_speed, min_x, max_x))
+
+    def get_spawn_interval(self):
+        speed_range = self.max_speed - self.min_speed
+        speed_ratio = 0.0 if speed_range == 0 else (self.player_speed - self.min_speed) / speed_range
+        speed_ratio = max(0.0, min(1.0, speed_ratio))
+        easing = speed_ratio ** 2
+        return int(self.base_spawn_interval - (self.base_spawn_interval - self.min_spawn_interval) * easing)
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -177,7 +209,7 @@ class Game:
         self.check_points()
 
         now = pygame.time.get_ticks()
-        if now - self.last_spawn_time >= self.spawn_interval:
+        if now - self.last_spawn_time >= self.get_spawn_interval():
             self.spawn_enemy()
             self.last_spawn_time = now
 

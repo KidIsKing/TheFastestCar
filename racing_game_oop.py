@@ -50,6 +50,7 @@ class Enemy:
         self.image = image
         self.rect = self.image.get_rect(topleft=(x, y))
         self.speed = speed
+        self.scored = False
 
     def update(self, world_speed=0):
         self.rect.y += self.speed + world_speed
@@ -108,6 +109,9 @@ class Game:
         self.road = Road()
         self.enemies = []
         self.running = True
+        self.start_score = 0
+        self.score = 0
+        self.best_score = self.start_score
         self.last_spawn_time = pygame.time.get_ticks()
         self.spawn_interval = 2000
         self.player_speed = 2
@@ -144,6 +148,8 @@ class Game:
         keys = pygame.key.get_pressed()
         self.player.update(keys)
 
+        self.check_points()
+
         now = pygame.time.get_ticks()
         if now - self.last_spawn_time >= self.spawn_interval:
             self.spawn_enemy()
@@ -162,6 +168,7 @@ class Game:
             enemy.draw(self.display)
 
         self.player.draw(self.display)
+        self.show_score_and_speed()
         pygame.display.flip()
 
     def get_collision_enemy(self):
@@ -191,6 +198,24 @@ class Game:
                         self.enemies.clear()
                         self.player.reset()
                         self.player_speed = self.start_speed
+                        self.score = self.start_score
+
+    def check_points(self):
+        for enemy in self.enemies:
+            if not enemy.scored and self.player.rect.bottom < enemy.rect.top:
+                self.score += 1
+                enemy.scored = True
+        self.best_score = max(self.score, self.best_score)
+
+    def show_score_and_speed(self):
+        font = pygame.font.SysFont(None, 36)
+        score_text = font.render(f"Score: {self.score}", True, (255, 255, 255))
+        best_score_text = font.render(f"Best score: {self.best_score}", True, (255, 255, 255))
+        self.display.blit(score_text, (10, 10))
+        self.display.blit(best_score_text, (10, 35))
+
+        speed_text = font.render(f"Speed: {self.player_speed}", True, (255, 255, 255))
+        self.display.blit(speed_text, (WIDTH - 100, HEIGHT - 30))
 
     def run(self):
         while self.running:

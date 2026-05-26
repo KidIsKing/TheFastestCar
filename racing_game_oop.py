@@ -24,11 +24,13 @@ class Player:
         self.rect = self.image.get_rect()
         self.start_x = WIDTH // 2 - 90
         self.start_y = HEIGHT - self.rect.height - 20
+        self.current_y = float(self.start_y)
         self.reset()
 
     def reset(self):
         self.rect.x = self.start_x
         self.rect.y = self.start_y
+        self.current_y = float(self.start_y)
 
     def update(self, keys):
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
@@ -38,8 +40,10 @@ class Player:
 
         self.rect.left = max(self.rect.left, WIDTH // 2 - 450 + 20)
         self.rect.right = min(self.rect.right, WIDTH // 2 + 450 - 20)
-        self.rect.top = max(self.rect.top, 0)
-        self.rect.bottom = min(self.rect.bottom, HEIGHT)
+
+    def update_vertical_position(self, target_y, smoothing):
+        self.current_y += (target_y - self.current_y) * smoothing
+        self.rect.y = int(round(self.current_y))
 
     def draw(self, surface):
         surface.blit(self.image, self.rect)
@@ -118,8 +122,17 @@ class Game:
         self.start_speed = self.player_speed
         self.max_speed = 30
         self.min_speed = 2
-        self.acceleration = 0.01  # нажатие W прибавляет это значение
-        self.deceleration = 1  # нажатие S убирает это значение
+        self.speed_acceleration = 0.07
+        self.speed_coast_deceleration = 0.03
+        self.speed_brake_deceleration = 0.3
+        self.throttle = 0.0
+        self.throttle_up_rate = 0.02
+        self.throttle_coast_rate = 0.008
+        self.throttle_brake_rate = 0.05
+        self.max_lift = 36
+        self.lift_smoothing = 0.08
+        self.coast_smoothing = 0.035
+        self.brake_smoothing = 0.18
         self.enemy_speed = 5
 
     def spawn_enemy(self):
@@ -138,15 +151,28 @@ class Game:
 
     def update(self):
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_UP] or keys[pygame.K_w]:
-            self.player_speed = min(self.player_speed + self.acceleration, self.max_speed)
-        elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
-            self.player_speed = max(self.player_speed - self.deceleration, self.min_speed)
+        accelerating = keys[pygame.K_UP] or keys[pygame.K_w]
+        braking = keys[pygame.K_DOWN] or keys[pygame.K_s]
+
+        if accelerating:
+            self.player_speed = min(self.player_speed + self.speed_acceleration, self.max_speed)
+            self.throttle = min(1.0, self.throttle + self.throttle_up_rate)
+        elif braking:
+            self.player_speed = max(self.player_speed - self.speed_brake_deceleration, self.min_speed)
+            self.throttle = max(0.0, self.throttle - self.throttle_brake_rate)
+        else:
+            self.player_speed = max(self.player_speed - self.speed_coast_deceleration, self.min_speed)
+            self.throttle = max(0.0, self.throttle - self.throttle_coast_rate)
+
+        lift_amount = self.max_lift * (self.throttle ** 2)
+        target_y = self.player.start_y - lift_amount
+        smoothing = self.brake_smoothing if braking else self.lift_smoothing if accelerating else self.coast_smoothing
 
         self.road.update(self.player_speed)
 
         keys = pygame.key.get_pressed()
         self.player.update(keys)
+        self.player.update_vertical_position(target_y, smoothing)
 
         self.check_points()
 
@@ -199,11 +225,12 @@ class Game:
                         self.player.reset()
                         self.player_speed = self.start_speed
                         self.score = self.start_score
+                        self.throttle = 0.0
 
     def check_points(self):
         for enemy in self.enemies:
             if not enemy.scored and self.player.rect.bottom < enemy.rect.top:
-                self.score += 1
+                self.score += 1 + self.player_speed // 10
                 enemy.scored = True
         self.best_score = max(self.score, self.best_score)
 
@@ -214,8 +241,8 @@ class Game:
         self.display.blit(score_text, (10, 10))
         self.display.blit(best_score_text, (10, 35))
 
-        speed_text = font.render(f"Speed: {self.player_speed}", True, (255, 255, 255))
-        self.display.blit(speed_text, (WIDTH - 100, HEIGHT - 30))
+        speed_text = font.render(f"Speed: {self.player_speed * 7:.2f}", True, (255, 255, 255))
+        self.display.blit(speed_text, (10, HEIGHT - 30))
 
     def run(self):
         while self.running:

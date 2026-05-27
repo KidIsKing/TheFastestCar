@@ -1,5 +1,6 @@
 import pygame
 import random
+import bisect
 
 
 WIDTH, HEIGHT = 1280, 720
@@ -12,6 +13,44 @@ ASSETS = {
     "enemy": ASSETS_PATH + "enemy_player.png",
     "fire": ASSETS_PATH + "fire.png",
 }
+
+
+class WeightedChoiceTable:
+    def __init__(self, rng):
+        self.rng = rng
+        self.items = []
+        self.cumulative_weights = []
+        self.total_weight = 0
+
+    def add(self, item, weight):
+        if weight <= 0:
+            return
+
+        self.total_weight += weight
+        self.items.append(item)
+        self.cumulative_weights.append(self.total_weight)
+
+    def roll(self):
+        if not self.items:
+            raise ValueError("WeightedChoiceTable is empty")
+
+        ticket = self.rng.uniform(0, self.total_weight)
+        index = bisect.bisect_left(self.cumulative_weights, ticket)
+        return self.items[index]
+
+
+class ShuffleBag:
+    def __init__(self, rng, items):
+        self.rng = rng
+        self.original_items = list(items)
+        self.bag = []
+
+    def draw(self):
+        if not self.bag:
+            self.bag = list(self.original_items)
+            self.rng.shuffle(self.bag)
+
+        return self.bag.pop()
 
 
 class Player:
@@ -50,16 +89,22 @@ class Player:
 
 
 class Enemy:
-    def __init__(self, image, x, y, speed, left_bound, right_bound):
+    def __init__(self, image, x, y, speed, left_bound, right_bound, rng):
         self.image = image
         self.rect = self.image.get_rect(topleft=(x, y))
         self.speed = speed
         self.left_bound = left_bound
         self.right_bound = right_bound
+        self.rng = rng
         self.float_x = float(self.rect.x)
-        self.drift_speed = random.choice([-1, 1]) * random.uniform(0.08, 0.22)
+        self.drift_speed = self.rng.choice([-1, 1]) * self.rng.uniform(
+            0.08,
+            0.22,
+        )
         self.drift_target_speed = self.drift_speed
-        self.next_drift_change = pygame.time.get_ticks() + random.randint(1200, 2600)
+        self.next_drift_change = (
+            pygame.time.get_ticks() + self.rng.randint(1200, 2600)
+        )
         self.scored = False
 
     def update(self, world_speed=0):
@@ -67,8 +112,11 @@ class Enemy:
 
         now = pygame.time.get_ticks()
         if now >= self.next_drift_change:
-            self.next_drift_change = now + random.randint(1200, 2600)
-            self.drift_target_speed = random.choice([-1, 1]) * random.uniform(0.08, 0.28)
+            self.next_drift_change = now + self.rng.randint(1200, 2600)
+            self.drift_target_speed = self.rng.choice([-1, 1]) * self.rng.uniform(
+                0.08,
+                0.28,
+            )
 
         self.drift_speed += (self.drift_target_speed - self.drift_speed) * 0.6
         self.float_x += self.drift_speed
@@ -85,6 +133,25 @@ class Enemy:
 
     def draw(self, surface):
         surface.blit(self.image, self.rect)
+
+    def is_off_screen(self):
+        return self.rect.top > HEIGHT + self.rect.height
+
+
+class Bonus:
+    def __init__(self, x, y, rng):
+        self.rect = pygame.Rect(x, y, 34, 34)
+        self.rng = rng
+        self.color = (255, 215, 0)
+        self.outline_color = (255, 245, 180)
+        self.scored = False
+
+    def update(self, world_speed=0):
+        self.rect.y += world_speed
+
+    def draw(self, surface):
+        pygame.draw.rect(surface, self.color, self.rect, border_radius=6)
+        pygame.draw.rect(surface, self.outline_color, self.rect, 2, border_radius=6)
 
     def is_off_screen(self):
         return self.rect.top > HEIGHT + self.rect.height
@@ -121,6 +188,12 @@ class Game:
         pygame.display.set_caption("TheFastestCar")
         self.clock = pygame.time.Clock()
 
+        self.master_seed = random.randrange(2**32)
+        self.master_rng = random.Random(self.master_seed)
+        self.spawn_rng = random.Random(self.master_rng.randrange(2**32))
+        self.enemy_rng = random.Random(self.master_rng.randrange(2**32))
+        self.bonus_rng = random.Random(self.master_rng.randrange(2**32))
+
         fire_image = pygame.image.load(ASSETS["fire"])
         self.fire_image = pygame.transform.smoothscale(
             fire_image,
@@ -136,13 +209,20 @@ class Game:
         self.player = Player()
         self.road = Road()
         self.enemies = []
+        self.bonuses = []
+        self.spawn_lanes = self.build_spawn_lanes()
+        self.spawn_lane_bag = ShuffleBag(self.spawn_rng, self.spawn_lanes)
+        self.bonus_lane_bag = ShuffleBag(self.bonus_rng, self.spawn_lanes)
         self.running = True
         self.start_score = 0
         self.score = 0
         self.best_score = self.start_score
         self.last_spawn_time = pygame.time.get_ticks()
+        self.last_bonus_spawn_time = pygame.time.get_ticks()
         self.base_spawn_interval = 2200
         self.min_spawn_interval = 700
+        self.base_bonus_interval = 3600
+        self.min_bonus_interval = 1400
         self.player_speed = 2
         self.start_speed = self.player_speed
         self.max_speed = 15
@@ -160,19 +240,87 @@ class Game:
         self.brake_smoothing = 0.18
         self.enemy_speed = 5
 
+    def build_spawn_lanes(self):
+        road_left = WIDTH // 2 - self.road.image.get_width() // 2
+        road_right = WIDTH // 2 + self.road.image.get_width() // 2
+        self.spawn_left_bound = road_left + self.player.rect.width + 140
+        self.spawn_right_bound = road_right - self.player.rect.width - 220
+        max_x = self.spawn_right_bound - self.enemy_image.get_width()
+        lane_count = 5
+        lane_step = (max_x - self.spawn_left_bound) / max(1, lane_count - 1)
+        return [
+            int(round(self.spawn_left_bound + lane_step * index))
+            for index in range(lane_count)
+        ]
+
     def spawn_enemy(self):
-        min_x = WIDTH // 2 - self.road.image.get_width() // 2 + self.player.rect.width + 140
-        max_x = WIDTH // 2 + self.road.image.get_width() // 2 - self.player.rect.width - 220
-        x = random.randint(min_x, max_x)
+        x = self.spawn_lane_bag.draw()
         y = -self.enemy_image.get_height()
-        self.enemies.append(Enemy(self.enemy_image, x, y, self.enemy_speed, min_x, max_x))
+        self.enemies.append(
+            Enemy(
+                self.enemy_image,
+                x,
+                y,
+                self.enemy_speed,
+                self.spawn_left_bound,
+                self.spawn_right_bound,
+                self.enemy_rng,
+            )
+        )
+
+    def spawn_enemy_group(self):
+        spawn_count = self.get_spawn_count()
+        for _ in range(spawn_count):
+            self.spawn_enemy()
+
+    def spawn_bonus(self):
+        x = self.bonus_lane_bag.draw()
+        y = -34
+        self.bonuses.append(Bonus(x, y, self.bonus_rng))
+
+    def spawn_bonus_group(self):
+        bonus_count = self.get_bonus_count()
+        for _ in range(bonus_count):
+            self.spawn_bonus()
 
     def get_spawn_interval(self):
-        speed_range = self.max_speed - self.min_speed
-        speed_ratio = 0.0 if speed_range == 0 else (self.player_speed - self.min_speed) / speed_range
+        speed_ratio = self.get_speed_ratio()
         speed_ratio = max(0.0, min(1.0, speed_ratio))
         easing = speed_ratio ** 2
-        return int(self.base_spawn_interval - (self.base_spawn_interval - self.min_spawn_interval) * easing)
+        interval = self.base_spawn_interval - (
+            self.base_spawn_interval - self.min_spawn_interval
+        ) * easing
+        return int(interval)
+
+    def get_speed_ratio(self):
+        speed_range = self.max_speed - self.min_speed
+        if speed_range == 0:
+            return 0.0
+        return (self.player_speed - self.min_speed) / speed_range
+
+    def get_spawn_count(self):
+        speed_ratio = max(0.0, min(1.0, self.get_speed_ratio()))
+        table = WeightedChoiceTable(self.spawn_rng)
+        table.add(1, max(10, int(90 - 45 * speed_ratio)))
+        table.add(2, max(5, int(10 + 30 * speed_ratio)))
+        table.add(3, max(1, int(2 + 20 * speed_ratio)))
+        return table.roll()
+
+    def get_bonus_interval(self):
+        speed_ratio = max(0.0, min(1.0, self.get_speed_ratio()))
+        easing = speed_ratio ** 2
+        interval = self.base_bonus_interval - (
+            self.base_bonus_interval - self.min_bonus_interval
+        ) * easing
+        return int(interval)
+
+    def get_bonus_count(self):
+        speed_ratio = max(0.0, min(1.0, self.get_speed_ratio()))
+        table = WeightedChoiceTable(self.bonus_rng)
+        table.add(1, max(10, int(85 - 40 * speed_ratio)))
+        table.add(2, max(4, int(12 + 25 * speed_ratio)))
+        table.add(3, max(1, int(3 + 12 * speed_ratio)))
+        return table.roll()
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -210,13 +358,21 @@ class Game:
 
         now = pygame.time.get_ticks()
         if now - self.last_spawn_time >= self.get_spawn_interval():
-            self.spawn_enemy()
+            self.spawn_enemy_group()
             self.last_spawn_time = now
+
+        if now - self.last_bonus_spawn_time >= self.get_bonus_interval():
+            self.spawn_bonus_group()
+            self.last_bonus_spawn_time = now
 
         for enemy in self.enemies:
             enemy.update(self.player_speed)
 
+        for bonus in self.bonuses:
+            bonus.update(self.player_speed)
+
         self.enemies = [enemy for enemy in self.enemies if not enemy.is_off_screen()]
+        self.bonuses = [bonus for bonus in self.bonuses if not bonus.is_off_screen()]
 
     def draw(self):
         self.display.fill((0, 0, 0))
@@ -224,6 +380,9 @@ class Game:
 
         for enemy in self.enemies:
             enemy.draw(self.display)
+
+        for bonus in self.bonuses:
+            bonus.draw(self.display)
 
         self.player.draw(self.display)
         self.show_score_and_speed()
@@ -233,6 +392,12 @@ class Game:
         for enemy in self.enemies:
             if self.player.rect.colliderect(enemy.rect):
                 return enemy
+        return None
+
+    def get_collision_bonus(self):
+        for bonus in self.bonuses:
+            if self.player.rect.colliderect(bonus.rect):
+                return bonus
         return None
 
     def show_crash_effect_and_pause(self, crash_enemy):
@@ -266,6 +431,12 @@ class Game:
                 enemy.scored = True
         self.best_score = max(self.score, self.best_score)
 
+    def collect_bonus(self, bonus):
+        if bonus in self.bonuses:
+            self.bonuses.remove(bonus)
+            self.score += 5 + int(self.player_speed // 5)
+            self.best_score = max(self.score, self.best_score)
+
     def show_score_and_speed(self):
         font = pygame.font.SysFont(None, 36)
         score_text = font.render(f"Score: {self.score}", True, (255, 255, 255))
@@ -285,6 +456,10 @@ class Game:
             crash_enemy = self.get_collision_enemy()
             if crash_enemy is not None:
                 self.show_crash_effect_and_pause(crash_enemy)
+
+            bonus = self.get_collision_bonus()
+            if bonus is not None:
+                self.collect_bonus(bonus)
 
             self.clock.tick(FPS)
 

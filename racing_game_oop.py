@@ -53,6 +53,39 @@ class ShuffleBag:
         return self.bag.pop()
 
 
+class FloatingText:
+    def __init__(self, text, pos, color=(255, 255, 255), lifespan=900, rise=36):
+        self.text = str(text)
+        self.start_x, self.start_y = int(pos[0]), int(pos[1])
+        self.color = color
+        self.lifespan = lifespan
+        self.rise = rise
+        self.start_time = pygame.time.get_ticks()
+        self.dead = False
+
+    def update(self):
+        now = pygame.time.get_ticks()
+        elapsed = now - self.start_time
+        if elapsed >= self.lifespan:
+            self.dead = True
+            return
+        self.progress = elapsed / float(self.lifespan)
+
+    def draw(self, surface, font):
+        if self.dead:
+            return
+        # позиция поднимается, альфа плавно уменьшается
+        y = int(self.start_y - self.rise * self.progress)
+        alpha = int(255 * (1.0 - self.progress))
+        text_surf = font.render(self.text, True, self.color)
+        try:
+            text_surf.set_alpha(alpha)
+        except Exception:
+            pass
+        x = int(self.start_x - text_surf.get_width() // 2)
+        surface.blit(text_surf, (x, y))
+
+
 class Player:
     def __init__(self):
         image = pygame.image.load(ASSETS["player"])
@@ -64,12 +97,26 @@ class Player:
         self.start_x = WIDTH // 2 - 90
         self.start_y = HEIGHT - self.rect.height - 20
         self.current_y = float(self.start_y)
+        # здоровье и хитбокс
+        self.max_health = 100
+        self.health = self.max_health
+        # хитбокс меньше спрайта для более честных столкновений
+        hb_w = int(self.rect.width * 0.7)
+        hb_h = int(self.rect.height * 0.6)
+        self.hitbox_offset_x = (self.rect.width - hb_w) // 2
+        self.hitbox_offset_y = (self.rect.height - hb_h) // 2
+        self.hitbox = pygame.Rect(self.rect.x + self.hitbox_offset_x,
+                      self.rect.y + self.hitbox_offset_y,
+                      hb_w, hb_h)
         self.reset()
 
     def reset(self):
         self.rect.x = self.start_x
         self.rect.y = self.start_y
         self.current_y = float(self.start_y)
+        self.health = self.max_health
+        self.hitbox.topleft = (self.rect.x + self.hitbox_offset_x,
+                                self.rect.y + self.hitbox_offset_y)
 
     def update(self, keys):
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
@@ -79,6 +126,9 @@ class Player:
 
         self.rect.left = max(self.rect.left, WIDTH // 2 - 450 + 20)
         self.rect.right = min(self.rect.right, WIDTH // 2 + 450 - 20)
+        # обновить позицию хитбокса
+        self.hitbox.topleft = (self.rect.x + self.hitbox_offset_x,
+                    self.rect.y + self.hitbox_offset_y)
 
     def update_vertical_position(self, target_y, smoothing):
         self.current_y += (target_y - self.current_y) * smoothing
@@ -86,7 +136,8 @@ class Player:
 
     def draw(self, surface):
         surface.blit(self.image, self.rect)
-
+        # отладка: рисовать хитбокс (закомментировать в финале)
+        # pygame.draw.rect(surface, (0,255,0), self.hitbox, 1)  # пример рисования хитбокса
 
 class Enemy:
     def __init__(self, image, x, y, speed, left_bound, right_bound, rng):
@@ -106,6 +157,16 @@ class Enemy:
             pygame.time.get_ticks() + self.rng.randint(1200, 2600)
         )
         self.scored = False
+        # хитбокс меньше спрайта для более честных столкновений
+        hb_w = int(self.rect.width * 0.8)
+        hb_h = int(self.rect.height * 0.85)
+        self.hitbox_offset_x = (self.rect.width - hb_w) // 2
+        self.hitbox_offset_y = (self.rect.height - hb_h) // 2
+        self.hitbox = pygame.Rect(self.rect.x + self.hitbox_offset_x,
+                      self.rect.y + self.hitbox_offset_y,
+                      hb_w, hb_h)
+        # базовый урон
+        self.base_damage = 8 + int(self.speed)
 
     def update(self, world_speed=0):
         self.rect.y += self.speed + world_speed
@@ -121,6 +182,9 @@ class Enemy:
         self.drift_speed += (self.drift_target_speed - self.drift_speed) * 0.6
         self.float_x += self.drift_speed
         self.rect.x = int(round(self.float_x))
+        # обновить позицию хитбокса
+        self.hitbox.topleft = (self.rect.x + self.hitbox_offset_x,
+                       self.rect.y + self.hitbox_offset_y)
 
         if self.rect.left <= self.left_bound:
             self.rect.left = self.left_bound
@@ -133,9 +197,18 @@ class Enemy:
 
     def draw(self, surface):
         surface.blit(self.image, self.rect)
-
+        # отладка: хитбокс врага
+        # pygame.draw.rect(surface, (255,0,0), self.hitbox, 1)  # пример рисования хитбокса врага
     def is_off_screen(self):
         return self.rect.top > HEIGHT + self.rect.height
+
+    def compute_damage(self):
+        # гауссов урон вокруг base_damage, с ограничением
+        mean = float(self.base_damage)
+        std = max(1.0, mean * 0.15)
+        dmg = int(round(self.rng.gauss(mean, std)))
+        dmg = max(1, min(dmg, int(mean * 2)))
+        return dmg
 
 
 class Bonus:
@@ -193,6 +266,9 @@ class Game:
         self.spawn_rng = random.Random(self.master_rng.randrange(2**32))
         self.enemy_rng = random.Random(self.master_rng.randrange(2**32))
         self.bonus_rng = random.Random(self.master_rng.randrange(2**32))
+        # шрифт UI и временные плавающие надписи
+        self.ui_font = pygame.font.SysFont(None, 36)
+        self.floating_texts = []
 
         fire_image = pygame.image.load(ASSETS["fire"])
         self.fire_image = pygame.transform.smoothscale(
@@ -267,6 +343,10 @@ class Game:
                 self.enemy_rng,
             )
         )
+
+    def spawn_floating_text(self, text, pos, color=(255, 255, 255), lifespan=900):
+        ft = FloatingText(text, pos, color=color, lifespan=lifespan)
+        self.floating_texts.append(ft)
 
     def spawn_enemy_group(self):
         spawn_count = self.get_spawn_count()
@@ -365,14 +445,59 @@ class Game:
             self.spawn_bonus_group()
             self.last_bonus_spawn_time = now
 
-        for enemy in self.enemies:
+        for enemy in list(self.enemies):
             enemy.update(self.player_speed)
 
-        for bonus in self.bonuses:
+        for bonus in list(self.bonuses):
             bonus.update(self.player_speed)
+
+        # обработка столкновений с врагами -> нанести урон; удалить врага при попадании
+        collision_enemy = self.get_collision_enemy()
+        if collision_enemy is not None:
+            dmg = collision_enemy.compute_damage()
+            self.player.health -= dmg
+            # удалить врага, который врезался в игрока
+            if collision_enemy in self.enemies:
+                self.enemies.remove(collision_enemy)
+            # плавающий текст для урона (спавн на 50px выше капота, чтобы было видно)
+            self.spawn_floating_text(
+                f"-{dmg} HP",
+                (self.player.rect.centerx, self.player.rect.top - 56),
+                (255, 255, 255),
+            )
+            # показать небольшой эффект попадания
+            impact_x = (self.player.rect.centerx + collision_enemy.rect.centerx) // 2
+            impact_y = (self.player.rect.centery + collision_enemy.rect.centery) // 2
+            self.display.blit(self.fire_image, self.fire_image.get_rect(center=(impact_x, impact_y)))
+            pygame.display.flip()
+            pygame.time.delay(120)
+            if self.player.health <= 0:
+                # фатально - пауза и сброс
+                self.show_crash_effect_and_pause(collision_enemy)
+
+        # собрать бонусы
+        collision_bonus = self.get_collision_bonus()
+        if collision_bonus is not None:
+            score_inc, heal = self.collect_bonus(collision_bonus)
+            self.spawn_floating_text(
+                f"+{heal} HP",
+                (self.player.rect.centerx, self.player.rect.top - 72),
+                (255, 255, 255),
+            )
+            self.spawn_floating_text(
+                f"+{score_inc}",
+                (self.player.rect.centerx, self.player.rect.top - 44),
+                (255, 255, 255),
+            )
 
         self.enemies = [enemy for enemy in self.enemies if not enemy.is_off_screen()]
         self.bonuses = [bonus for bonus in self.bonuses if not bonus.is_off_screen()]
+
+        # обновить плавающие надписи и удалить устаревшие
+        for ft in list(self.floating_texts):
+            ft.update()
+            if ft.dead:
+                self.floating_texts.remove(ft)
 
     def draw(self):
         self.display.fill((0, 0, 0))
@@ -386,6 +511,11 @@ class Game:
 
         self.player.draw(self.display)
         self.show_score_and_speed()
+
+        # рисовать плавающие надписи последними (поверх всех сущностей)
+        for ft in self.floating_texts:
+            ft.draw(self.display, self.ui_font)
+
         pygame.display.flip()
 
     def get_collision_enemy(self):
@@ -434,8 +564,17 @@ class Game:
     def collect_bonus(self, bonus):
         if bonus in self.bonuses:
             self.bonuses.remove(bonus)
-            self.score += 5 + int(self.player_speed // 5)
+            # очки + лечение
+            score_gain = 5 + int(self.player_speed // 5)
+            self.score += score_gain
             self.best_score = max(self.score, self.best_score)
+            # лечение с небольшим гауссовским разбросом
+            heal = int(round(self.bonus_rng.gauss(20.0, 5.0)))
+            heal = max(5, min(heal, 40))
+            self.player.health = min(self.player.max_health, self.player.health + heal)
+            return score_gain, heal
+
+        return 0, 0
 
     def show_score_and_speed(self):
         font = pygame.font.SysFont(None, 36)
@@ -443,6 +582,15 @@ class Game:
         best_score_text = font.render(f"Best score: {self.best_score}", True, (255, 255, 255))
         self.display.blit(score_text, (10, 10))
         self.display.blit(best_score_text, (10, 35))
+
+        # полоса здоровья
+        hb_x = 10
+        hb_y = 70
+        hb_w = 220
+        hb_h = 14
+        pygame.draw.rect(self.display, (60, 60, 60), (hb_x, hb_y, hb_w, hb_h))
+        health_ratio = max(0.0, min(1.0, self.player.health / self.player.max_health))
+        pygame.draw.rect(self.display, (50, 205, 50), (hb_x + 2, hb_y + 2, int((hb_w - 4) * health_ratio), hb_h - 4))
 
         speed_text = font.render(f"Speed: {self.player_speed * 7:.2f}", True, (255, 255, 255))
         self.display.blit(speed_text, (10, HEIGHT - 30))
@@ -452,14 +600,7 @@ class Game:
             self.handle_events()
             self.update()
             self.draw()
-
-            crash_enemy = self.get_collision_enemy()
-            if crash_enemy is not None:
-                self.show_crash_effect_and_pause(crash_enemy)
-
-            bonus = self.get_collision_bonus()
-            if bonus is not None:
-                self.collect_bonus(bonus)
+            # коллизии обрабатываются внутри update(): урон, смерть и сбор бонусов
 
             self.clock.tick(FPS)
 

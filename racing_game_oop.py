@@ -53,6 +53,107 @@ class ShuffleBag:
         return self.bag.pop()
 
 
+class EnemyGenome:
+    """Геном врага: параметры, которые эволюционируют"""
+    def __init__(self, genes=None):
+        if genes:
+            # гены = [агрессивность, вероятность рывка, интенсивность дрифта]
+            self.genes = list(genes)
+        else:
+            # случайная инициализация в разумных диапазонах
+            self.genes = [
+                random.uniform(0.5, 1.3),   # агрессивность
+                random.uniform(0.3, 0.9),   # вероятность рывка
+                random.uniform(0.6, 1.8),   # интенсивность дрифта (большая амплитуда)
+            ]
+        self.fitness = 0.0
+
+    def copy(self):
+        """Создать копию генома"""
+        return EnemyGenome(self.genes[:])
+
+
+class GeneticAlgorithm:
+    """Генетический алгоритм для эволюции врагов"""
+    def __init__(self, population_size=10, mutation_rate=0.35):
+        self.population_size = population_size
+        self.mutation_rate = mutation_rate
+        self.population = [EnemyGenome() for _ in range(population_size)]
+        self.generation = 0
+        self.best_genome = None
+        self.best_fitness = -float('inf')
+
+    def evaluate_population(self):
+        """Оценить приспособленность каждого генома в популяции"""
+        for genome in self.population:
+            # Приблизительная оценка на основе параметров
+            aggressiveness, burst_rate, drift = genome.genes
+            
+            # Агрессивность: оптимально около 0.8
+            aggr_score = 100 - abs(aggressiveness - 0.8) * 60
+            
+            # Рывок и дрифт - высокие значения поощряются (активное поведение)
+            behavior_score = (burst_rate * 50) + (drift * 60)
+            
+            # Комбинированный фитнес с приоритетом на поведение
+            genome.fitness = max(0, aggr_score + behavior_score)
+            
+            # Обновляем лучший результат
+            if genome.fitness > self.best_fitness:
+                self.best_fitness = genome.fitness
+                self.best_genome = genome.copy()
+
+    def tournament_selection(self, tournament_size=3):
+        """Турнирный отбор: выбираем K случайных, побеждает лучший"""
+        tournament = random.sample(
+            self.population,
+            min(tournament_size, len(self.population))
+        )
+        return max(tournament, key=lambda g: g.fitness)
+
+    def crossover(self, parent_a, parent_b):
+        """Одноточечное скрещивание"""
+        point = random.randint(1, len(parent_a.genes) - 1)
+        child_genes = parent_a.genes[:point] + parent_b.genes[point:]
+        return EnemyGenome(child_genes)
+
+    def mutate(self, genome, strength=0.15):
+        """Мутация: случайно отклоняем гены"""
+        mutated_genes = []
+        for gene in genome.genes:
+            if random.random() < self.mutation_rate:
+                mutation = random.gauss(0, strength * gene)
+                mutated_gene = gene + mutation
+                mutated_gene = max(0.0, min(2.0, mutated_gene))
+                mutated_genes.append(mutated_gene)
+            else:
+                mutated_genes.append(gene)
+        return EnemyGenome(mutated_genes)
+
+    def evolve(self, elitism=1):
+        """Выполнить один цикл эволюции"""
+        sorted_pop = sorted(
+            self.population,
+            key=lambda g: g.fitness,
+            reverse=True
+        )
+        new_population = [g.copy() for g in sorted_pop[:elitism]]
+        
+        while len(new_population) < self.population_size:
+            parent_a = self.tournament_selection()
+            parent_b = self.tournament_selection()
+            child = self.crossover(parent_a, parent_b)
+            child = self.mutate(child)
+            new_population.append(child)
+        
+        self.population = new_population
+        self.generation += 1
+
+    def get_best_genome(self):
+        """Вернуть лучший геном из истории"""
+        return self.best_genome
+
+
 class FloatingText:
     def __init__(self, text, pos, color=(255, 255, 255), lifespan=900, rise=36):
         self.text = str(text)
@@ -140,21 +241,35 @@ class Player:
         # pygame.draw.rect(surface, (0,255,0), self.hitbox, 1)  # пример рисования хитбокса
 
 class Enemy:
-    def __init__(self, image, x, y, speed, left_bound, right_bound, rng):
+    def __init__(self, image, x, y, speed, left_bound, right_bound, rng, genome=None):
         self.image = image
         self.rect = self.image.get_rect(topleft=(x, y))
         self.speed = speed
         self.left_bound = left_bound
         self.right_bound = right_bound
         self.rng = rng
+        self.genome = genome if genome else EnemyGenome()
+        
+        # достаем гены для поведения
+        self.aggressiveness = self.genome.genes[0]
+        self.burst_rate = self.genome.genes[1]
+        self.drift_intensity = self.genome.genes[2]
+        
         self.float_x = float(self.rect.x)
+        # система ускорения/замедления вперед
+        self.base_speed = speed
+        self.speed_variation = 0
+        self.speed_target = 0
+        self.next_speed_change = pygame.time.get_ticks() + self.rng.randint(600, 1500)
+        
+        # система боковых перестроений с большой амплитудой
         self.drift_speed = self.rng.choice([-1, 1]) * self.rng.uniform(
-            0.08,
-            0.22,
+            0.4 * self.drift_intensity,
+            1.0 * self.drift_intensity,
         )
         self.drift_target_speed = self.drift_speed
         self.next_drift_change = (
-            pygame.time.get_ticks() + self.rng.randint(1200, 2600)
+            pygame.time.get_ticks() + self.rng.randint(250, 700)
         )
         self.scored = False
         # хитбокс меньше спрайта для более честных столкновений
@@ -165,21 +280,34 @@ class Enemy:
         self.hitbox = pygame.Rect(self.rect.x + self.hitbox_offset_x,
                       self.rect.y + self.hitbox_offset_y,
                       hb_w, hb_h)
-        # базовый урон
-        self.base_damage = 8 + int(self.speed)
+        # базовый урон (зависит от агрессивности)
+        self.base_damage = int((8 + self.speed) * self.aggressiveness)
 
     def update(self, world_speed=0):
-        self.rect.y += self.speed + world_speed
-
         now = pygame.time.get_ticks()
+        
+        # случайное ускорение/замедление враги
+        if now >= self.next_speed_change:
+            self.next_speed_change = now + self.rng.randint(600, 1500)
+            self.speed_target = self.rng.uniform(-0.3, 0.3) * self.base_speed * self.aggressiveness
+        
+        # плавный переход к целевому ускорению
+        self.speed_variation += (self.speed_target - self.speed_variation) * 0.12
+        
+        # применяем ускорение/замедление
+        actual_speed = self.base_speed + self.speed_variation
+        self.rect.y += actual_speed + world_speed
+        
+        # быстрые перестроения между полосами
         if now >= self.next_drift_change:
-            self.next_drift_change = now + self.rng.randint(1200, 2600)
+            self.next_drift_change = now + self.rng.randint(250, 700)
             self.drift_target_speed = self.rng.choice([-1, 1]) * self.rng.uniform(
-                0.08,
-                0.28,
+                0.4 * self.drift_intensity,
+                1.0 * self.drift_intensity,
             )
-
-        self.drift_speed += (self.drift_target_speed - self.drift_speed) * 0.6
+        
+        # быстрое реагирование на смену направления дрифта
+        self.drift_speed += (self.drift_target_speed - self.drift_speed) * 0.25
         self.float_x += self.drift_speed
         self.rect.x = int(round(self.float_x))
         # обновить позицию хитбокса
@@ -270,6 +398,11 @@ class Game:
         self.ui_font = pygame.font.SysFont(None, 36)
         self.floating_texts = []
 
+        # Генетический алгоритм для эволюции врагов
+        self.ga = GeneticAlgorithm(population_size=8, mutation_rate=0.35)
+        self.ga.evaluate_population()
+        self.best_enemy_genome = self.ga.get_best_genome()
+
         fire_image = pygame.image.load(ASSETS["fire"])
         self.fire_image = pygame.transform.smoothscale(
             fire_image,
@@ -289,6 +422,10 @@ class Game:
         self.spawn_lanes = self.build_spawn_lanes()
         self.spawn_lane_bag = ShuffleBag(self.spawn_rng, self.spawn_lanes)
         self.bonus_lane_bag = ShuffleBag(self.bonus_rng, self.spawn_lanes)
+        
+        # счетчик спавненных врагов для эволюции
+        self.enemy_spawn_count = 0
+        self.evolution_interval = 10  # эволюция после каждых 10 врагов
         self.running = True
         self.start_score = 0
         self.score = 0
@@ -341,8 +478,16 @@ class Game:
                 self.spawn_left_bound,
                 self.spawn_right_bound,
                 self.enemy_rng,
+                genome=self.best_enemy_genome,
             )
         )
+        self.enemy_spawn_count += 1
+        
+        # периодическая эволюция генов врагов
+        if self.enemy_spawn_count % self.evolution_interval == 0:
+            self.ga.evaluate_population()
+            self.ga.evolve()
+            self.best_enemy_genome = self.ga.get_best_genome()
 
     def spawn_floating_text(self, text, pos, color=(255, 255, 255), lifespan=900):
         ft = FloatingText(text, pos, color=color, lifespan=lifespan)

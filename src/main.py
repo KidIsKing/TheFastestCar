@@ -3,164 +3,108 @@ TheFastestCar — бесконечная аркада на шоссе.
 Экзаменационная работа по курсу «Программирование», 1 курс.
 """
 
-import bisect
 import pygame
 import random
 
-
-WIDTH, HEIGHT = 1280, 720
-FPS = 60
-
-ASSETS_PATH = "assets/"
-ASSETS = {
-    "road": ASSETS_PATH + "road_background.png",
-    "player": ASSETS_PATH + "car_player.png",
-    "enemy": ASSETS_PATH + "enemy_player.png",
-    "fire": ASSETS_PATH + "fire.png",
-}
-
-
-class WeightedChoiceTable:
-    """Взвешенный случайный выбор с бинарным поиском."""
-
-    def __init__(self, rng):
-        """Инициализировать таблицу."""
-        self.rng = rng
-        self.items = []
-        self.cumulative_weights = []
-        self.total_weight = 0
-
-    def add(self, item, weight):
-        """Добавить элемент с весом."""
-        if weight <= 0:
-            return
-        self.total_weight += weight
-        self.items.append(item)
-        self.cumulative_weights.append(self.total_weight)
-
-    def roll(self):
-        """Выбрать элемент пропорционально весу через бинарный поиск."""
-        if not self.items:
-            raise ValueError("WeightedChoiceTable is empty")
-        # Бросаем «билет» в диапазоне [0, total_weight] и находим сегмент
-        ticket = self.rng.uniform(0, self.total_weight)
-        index = bisect.bisect_left(self.cumulative_weights, ticket)
-        return self.items[index]
-
-
-class ShuffleBag:
-    """Мешок без возврата: равномерное распределение без повторений."""
-
-    def __init__(self, rng, items):
-        """Инициализировать мешок."""
-        self.rng = rng
-        self.original_items = list(items)
-        self.bag = []
-
-    def draw(self):
-        """Взять элемент; если мешок пуст — перемешать заново."""
-        if not self.bag:
-            self.bag = list(self.original_items)
-            self.rng.shuffle(self.bag)  # Fisher-Yates внутри random.shuffle()
-        return self.bag.pop()
-
-
-class EnemyGenome:
-    """Геном врага: параметры для генетической эволюции."""
-
-    def __init__(self, genes=None):
-        """Инициализировать гены."""
-        if genes:
-            self.genes = list(genes)
-        else:
-            # Диапазоны подобраны эмпирически для сбалансированного геймплея
-            self.genes = [
-                random.uniform(0.5, 1.3),  # агрессивность -> множитель урона
-                random.uniform(0.3, 0.9),  # burst_rate -> частота смены поведения
-                random.uniform(
-                    0.6, 1.8
-                ),  # drift_intensity -> амплитуда бокового движения
-            ]
-        self.fitness = 0.0
-
-    def copy(self):
-        """Создать копию генома."""
-        return EnemyGenome(self.genes[:])
-
-
-class GeneticAlgorithm:
-    """Генетический алгоритм для эволюции параметров врагов."""
-
-    def __init__(self, population_size=10, mutation_rate=0.35):
-        """Создать популяцию и настроить параметры."""
-        self.population_size = population_size
-        self.mutation_rate = mutation_rate
-        self.population = [EnemyGenome() for _ in range(population_size)]
-        self.generation = 0
-        self.best_genome = None
-        self.best_fitness = -float("inf")
-
-    def evaluate_population(self):
-        """Оценить фитнес каждого генома по эвристике баланса параметров."""
-        for genome in self.population:
-            aggressiveness, burst_rate, drift = genome.genes
-            # Агрессивность: оптимум ~0.8 — враг не слишком слабый и не имба
-            aggr_score = 100 - abs(aggressiveness - 0.8) * 60
-            # Поведение: поощряем активные манёвры (рывки + дрифт)
-            behavior_score = (burst_rate * 50) + (drift * 60)
-            genome.fitness = max(0, aggr_score + behavior_score)
-            if genome.fitness > self.best_fitness:
-                self.best_fitness = genome.fitness
-                self.best_genome = genome.copy()
-
-    def tournament_selection(self, tournament_size=3):
-        """Турнирный отбор: лучший из K случайных — баланс давления и разнообразия."""
-        tournament = random.sample(
-            self.population, min(tournament_size, len(self.population))
-        )
-        return max(tournament, key=lambda g: g.fitness)
-
-    def crossover(self, parent_a, parent_b):
-        """Одноточечное скрещивание: комбинируем гены родителей."""
-        point = random.randint(1, len(parent_a.genes) - 1)
-        child_genes = parent_a.genes[:point] + parent_b.genes[point:]
-        return EnemyGenome(child_genes)
-
-    def mutate(self, genome, strength=0.15):
-        """Гауссова мутация: исследуем окрестности генов, не ломаем хорошие решения."""
-        mutated_genes = []
-        for gene in genome.genes:
-            if random.random() < self.mutation_rate:
-                # Мутация пропорциональна значению гена — относительное отклонение
-                mutation = random.gauss(0, strength * gene)
-                mutated_gene = max(0.0, min(2.0, gene + mutation))
-                mutated_genes.append(mutated_gene)
-            else:
-                mutated_genes.append(gene)
-        return EnemyGenome(mutated_genes)
-
-    def evolve(self, elitism=1):
-        """Цикл эволюции: отбор -> скрещивание -> мутация; элитизм сохраняет лучшее."""
-        sorted_pop = sorted(self.population, key=lambda g: g.fitness, reverse=True)
-        new_population = [g.copy() for g in sorted_pop[:elitism]]
-        while len(new_population) < self.population_size:
-            parent_a = self.tournament_selection()
-            parent_b = self.tournament_selection()
-            child = self.crossover(parent_a, parent_b)
-            child = self.mutate(child)
-            new_population.append(child)
-        self.population = new_population
-        self.generation += 1
-
-    def get_best_genome(self):
-        """Вернуть лучший геном за историю."""
-        return self.best_genome
+try:
+    from .constants import (
+        WIDTH,
+        HEIGHT,
+        FPS,
+        ASSETS,
+        PLAYER_ROTATION,
+        PLAYER_SCALE_W,
+        PLAYER_SCALE_H,
+        PLAYER_START_X_OFFSET,
+        PLAYER_START_Y_MARGIN,
+        PLAYER_MAX_HEALTH,
+        PLAYER_HITBOX_W,
+        PLAYER_HITBOX_H,
+        PLAYER_MOVE_STEP,
+        PLAYER_SIDE_MARGIN,
+        ENEMY_IMAGE_SCALE_W,
+        ENEMY_IMAGE_SCALE_H,
+        ENEMY_SPEED_CHANGE_MIN,
+        ENEMY_SPEED_CHANGE_MAX,
+        ENEMY_DRIFT_CHANGE_MIN,
+        ENEMY_DRIFT_CHANGE_MAX,
+        ENEMY_DRIFT_MULT_MIN,
+        ENEMY_DRIFT_MULT_MAX,
+        ENEMY_HITBOX_W,
+        ENEMY_HITBOX_H,
+        ENEMY_BASE_DAMAGE_OFFSET,
+        ENEMY_DAMAGE_STD_RATIO,
+        ENEMY_DAMAGE_CLAMP_MULT,
+        ENEMY_DEFAULT_SPEED,
+        BONUS_SIZE,
+        BONUS_COLOR,
+        BONUS_OUTLINE_COLOR,
+        BONUS_SCORE_BASE,
+        BONUS_HEAL_MEAN,
+        BONUS_HEAL_STD,
+        BONUS_HEAL_MIN,
+        BONUS_HEAL_MAX,
+        FLOATING_TEXT_LIFESPAN,
+        FLOATING_TEXT_RISE,
+        FLOATING_TEXT_COLOR,
+        ROAD_HALF_WIDTH_MARGIN,
+        ROAD_SPEED,
+        SPAWN_LEFT_SAFE_OFFSET,
+        SPAWN_RIGHT_SAFE_OFFSET,
+        LANE_COUNT,
+        BASE_SPAWN_INTERVAL,
+        MIN_SPAWN_INTERVAL,
+        BASE_BONUS_INTERVAL,
+        MIN_BONUS_INTERVAL,
+        EVOLUTION_INTERVAL,
+        GA_POPULATION_SIZE,
+        GA_MUTATION_RATE,
+        PLAYER_START_SPEED,
+        PLAYER_MAX_SPEED,
+        PLAYER_MIN_SPEED,
+        SPEED_ACCELERATION,
+        SPEED_COAST_DECELERATION,
+        SPEED_BRAKE_DECELERATION,
+        SPEED_SMOOTHING,
+        THROTTLE_UP_RATE,
+        THROTTLE_COAST_RATE,
+        THROTTLE_BRAKE_RATE,
+        MAX_LIFT,
+        LIFT_SMOOTHING,
+        COAST_SMOOTHING,
+        BRAKE_SMOOTHING,
+        UI_FONT_SIZE,
+        UI_SCORE_POS,
+        UI_BEST_SCORE_POS,
+        UI_HEALTH_BAR,
+        UI_HEALTH_BG_COLOR,
+        UI_HEALTH_COLOR,
+        UI_SPEED_POS,
+        FIRE_SCALE,
+        CRASH_DISPLAY_DELAY,
+        ENEMY_MIN_GAP,
+    )
+    from .algorithms import (
+        WeightedChoiceTable,
+        ShuffleBag,
+        EnemyGenome,
+        GeneticAlgorithm,
+    )
+except Exception:
+    # Fallback for running the script directly (not as package)
+    from constants import WIDTH, HEIGHT, FPS, ASSETS
+    from algorithms import (
+        WeightedChoiceTable,
+        ShuffleBag,
+        EnemyGenome,
+        GeneticAlgorithm,
+    )
 
 
 class FloatingText:
     """Плавающий текст для визуальной обратной связи."""
 
-    def __init__(self, text, pos, color=(255, 255, 255), lifespan=900, rise=36):
+    def __init__(self, text, pos, color=FLOATING_TEXT_COLOR, lifespan=FLOATING_TEXT_LIFESPAN, rise=FLOATING_TEXT_RISE):
         """Инициализировать текст."""
         self.text = str(text)
         self.start_x, self.start_y = int(pos[0]), int(pos[1])
@@ -200,20 +144,20 @@ class Player:
     def __init__(self):
         """Загрузить спрайт, инициализировать позицию, здоровье, хитбокс."""
         image = pygame.image.load(ASSETS["player"])
-        image = pygame.transform.rotate(image, 90)
+        image = pygame.transform.rotate(image, PLAYER_ROTATION)
         image = pygame.transform.smoothscale(
-            image, (int(image.get_width() * 0.3), int(image.get_width() * 0.5))
+            image, (int(image.get_width() * PLAYER_SCALE_W), int(image.get_width() * PLAYER_SCALE_H))
         )
         self.image = image
         self.rect = self.image.get_rect()
-        self.start_x = WIDTH // 2 - 90
-        self.start_y = HEIGHT - self.rect.height - 20
+        self.start_x = WIDTH // 2 + PLAYER_START_X_OFFSET
+        self.start_y = HEIGHT - self.rect.height - PLAYER_START_Y_MARGIN
         self.current_y = float(self.start_y)
-        self.max_health = 100
+        self.max_health = PLAYER_MAX_HEALTH
         self.health = self.max_health
         # Хитбокс меньше спрайта — столкновения честнее, игрок не «умирает от касания краем»
-        hb_w = int(self.rect.width * 0.7)
-        hb_h = int(self.rect.height * 0.6)
+        hb_w = int(self.rect.width * PLAYER_HITBOX_W)
+        hb_h = int(self.rect.height * PLAYER_HITBOX_H)
         self.hitbox_offset_x = (self.rect.width - hb_w) // 2
         self.hitbox_offset_y = (self.rect.height - hb_h) // 2
         self.hitbox = pygame.Rect(
@@ -242,12 +186,12 @@ class Player:
     def update(self, keys):
         """Обработать ввод: горизонтальное движение с ограничением по дороге."""
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            self.rect.x -= 10
+            self.rect.x -= PLAYER_MOVE_STEP
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            self.rect.x += 10
+            self.rect.x += PLAYER_MOVE_STEP
         # Ограничиваем движение в пределах дороги + небольшой отступ от края
-        self.rect.left = max(self.rect.left, WIDTH // 2 - 450 + 20)
-        self.rect.right = min(self.rect.right, WIDTH // 2 + 450 - 20)
+        self.rect.left = max(self.rect.left, WIDTH // 2 - ROAD_HALF_WIDTH_MARGIN + PLAYER_SIDE_MARGIN)
+        self.rect.right = min(self.rect.right, WIDTH // 2 + ROAD_HALF_WIDTH_MARGIN - PLAYER_SIDE_MARGIN)
         self._update_hitbox()
 
     def update_vertical_position(self, target_y, smoothing):
@@ -281,17 +225,17 @@ class Enemy:
         self.base_speed = speed
         self.speed_variation = 0
         self.speed_target = 0
-        self.next_speed_change = pygame.time.get_ticks() + self.rng.randint(600, 1500)
+        self.next_speed_change = pygame.time.get_ticks() + self.rng.randint(ENEMY_SPEED_CHANGE_MIN, ENEMY_SPEED_CHANGE_MAX)
         # Инициализация дрифта: случайное направление и сила в пределах интенсивности
         self.drift_speed = self.rng.choice([-1, 1]) * self.rng.uniform(
-            0.4 * self.drift_intensity, 1.0 * self.drift_intensity
+            ENEMY_DRIFT_MULT_MIN * self.drift_intensity, ENEMY_DRIFT_MULT_MAX * self.drift_intensity
         )
         self.drift_target_speed = self.drift_speed
-        self.next_drift_change = pygame.time.get_ticks() + self.rng.randint(250, 700)
+        self.next_drift_change = pygame.time.get_ticks() + self.rng.randint(ENEMY_DRIFT_CHANGE_MIN, ENEMY_DRIFT_CHANGE_MAX)
         self.scored = False
         # Хитбокс врага: чуть меньше спрайта, но больше, чем у игрока — баланс сложности
-        hb_w = int(self.rect.width * 0.8)
-        hb_h = int(self.rect.height * 0.85)
+        hb_w = int(self.rect.width * ENEMY_HITBOX_W)
+        hb_h = int(self.rect.height * ENEMY_HITBOX_H)
         self.hitbox_offset_x = (self.rect.width - hb_w) // 2
         self.hitbox_offset_y = (self.rect.height - hb_h) // 2
         self.hitbox = pygame.Rect(
@@ -301,7 +245,7 @@ class Enemy:
             hb_h,
         )
         # Базовый урон: зависит от скорости и агрессивности
-        self.base_damage = int((8 + self.speed) * self.aggressiveness)
+        self.base_damage = int((ENEMY_BASE_DAMAGE_OFFSET + self.speed) * self.aggressiveness)
 
     def _update_hitbox(self):
         """Синхронизировать хитбокс."""
@@ -315,22 +259,22 @@ class Enemy:
         now = pygame.time.get_ticks()
         # Случайное изменение скорости: имитация «нервного» вождения
         if now >= self.next_speed_change:
-            self.next_speed_change = now + self.rng.randint(600, 1500)
+            self.next_speed_change = now + self.rng.randint(ENEMY_SPEED_CHANGE_MIN, ENEMY_SPEED_CHANGE_MAX)
             self.speed_target = (
-                self.rng.uniform(-0.3, 0.3) * self.base_speed * self.aggressiveness
+                self.rng.uniform(ENEMY_SPEED_TARGET_MIN, ENEMY_SPEED_TARGET_MAX) * self.base_speed * self.aggressiveness
             )
         # Плавное приближение к целевому изменению скорости — без рывков
-        self.speed_variation += (self.speed_target - self.speed_variation) * 0.12
+        self.speed_variation += (self.speed_target - self.speed_variation) * ENEMY_SPEED_VARIATION_SMOOTH
         actual_speed = self.base_speed + self.speed_variation
         self.rect.y += actual_speed + world_speed
         # Смена направления дрифта: частота зависит от burst_rate
         if now >= self.next_drift_change:
-            self.next_drift_change = now + self.rng.randint(250, 700)
+            self.next_drift_change = now + self.rng.randint(ENEMY_DRIFT_CHANGE_MIN, ENEMY_DRIFT_CHANGE_MAX)
             self.drift_target_speed = self.rng.choice([-1, 1]) * self.rng.uniform(
-                0.4 * self.drift_intensity, 1.0 * self.drift_intensity
+                ENEMY_DRIFT_MULT_MIN * self.drift_intensity, ENEMY_DRIFT_MULT_MAX * self.drift_intensity
             )
         # Плавный переход к новому направлению дрифта — естественное поведение
-        self.drift_speed += (self.drift_target_speed - self.drift_speed) * 0.25
+        self.drift_speed += (self.drift_target_speed - self.drift_speed) * ENEMY_DRIFT_SMOOTH
         self.float_x += self.drift_speed
         self.rect.x = int(round(self.float_x))
         # Отскок от границ дороги: меняем направление дрифта, чтобы не «застревать»
@@ -355,12 +299,10 @@ class Enemy:
     def compute_damage(self):
         """Рассчитать урон: гауссов разброс + ограничение выбросов."""
         mean = float(self.base_damage)
-        std = max(
-            1.0, mean * 0.15
-        )  # ~15% отклонение — ощутимый, но не хаотичный разброс
+        std = max(1.0, mean * ENEMY_DAMAGE_STD_RATIO)  # отклонение
         dmg = int(round(self.rng.gauss(mean, std)))
-        # Clamp: защищаем от экстремальных значений (правило «трёх сигм» на практике)
-        return max(1, min(dmg, int(mean * 2)))
+        # Clamp: защищаем от экстремальных значений
+        return max(1, min(dmg, int(mean * ENEMY_DAMAGE_CLAMP_MULT)))
 
 
 class Bonus:
@@ -368,10 +310,10 @@ class Bonus:
 
     def __init__(self, x, y, rng):
         """Инициализировать бонус."""
-        self.rect = pygame.Rect(x, y, 34, 34)
+        self.rect = pygame.Rect(x, y, BONUS_SIZE, BONUS_SIZE)
         self.rng = rng
-        self.color = (255, 215, 0)
-        self.outline_color = (255, 245, 180)
+        self.color = BONUS_COLOR
+        self.outline_color = BONUS_OUTLINE_COLOR
         self.scored = False
 
     def update(self, world_speed=0):
@@ -394,10 +336,10 @@ class Road:
     def __init__(self):
         """Загрузить и масштабировать спрайт."""
         image = pygame.image.load(ASSETS["road"])
-        self.image = pygame.transform.smoothscale(image, ((WIDTH // 2) + 450, HEIGHT))
+        self.image = pygame.transform.smoothscale(image, ((WIDTH // 2) + ROAD_HALF_WIDTH_MARGIN, HEIGHT))
         self.y1 = 0
         self.y2 = self.image.get_height()
-        self.speed = 5
+        self.speed = ROAD_SPEED
 
     def update(self, world_speed=0):
         """Сдвинуть текстуры, реализовать зацикливание."""
@@ -432,20 +374,20 @@ class Game:
         self.spawn_rng = random.Random(self.master_rng.randrange(2**32))
         self.enemy_rng = random.Random(self.master_rng.randrange(2**32))
         self.bonus_rng = random.Random(self.master_rng.randrange(2**32))
-        self.ui_font = pygame.font.SysFont(None, 36)
+        self.ui_font = pygame.font.SysFont(None, UI_FONT_SIZE)
         self.floating_texts = []
-        self.ga = GeneticAlgorithm(population_size=8, mutation_rate=0.35)
+        self.ga = GeneticAlgorithm(population_size=GA_POPULATION_SIZE, mutation_rate=GA_MUTATION_RATE)
         self.ga.evaluate_population()
         self.best_enemy_genome = self.ga.get_best_genome()
         fire_image = pygame.image.load(ASSETS["fire"])
         self.fire_image = pygame.transform.smoothscale(
             fire_image,
-            (int(fire_image.get_width() * 0.5), int(fire_image.get_width() * 0.5)),
+            (int(fire_image.get_width() * FIRE_SCALE), int(fire_image.get_width() * FIRE_SCALE)),
         )
         enemy_image = pygame.image.load(ASSETS["enemy"])
         self.enemy_image = pygame.transform.smoothscale(
             enemy_image,
-            (int(enemy_image.get_width() * 0.15), int(enemy_image.get_width() * 0.25)),
+            (int(enemy_image.get_width() * ENEMY_IMAGE_SCALE_W), int(enemy_image.get_width() * ENEMY_IMAGE_SCALE_H)),
         )
         self.player = Player()
         self.road = Road()
@@ -455,45 +397,45 @@ class Game:
         self.spawn_lane_bag = ShuffleBag(self.spawn_rng, self.spawn_lanes)
         self.bonus_lane_bag = ShuffleBag(self.bonus_rng, self.spawn_lanes)
         self.enemy_spawn_count = 0
-        self.evolution_interval = 10
+        self.evolution_interval = EVOLUTION_INTERVAL
         self.running = True
         self.start_score = 0
         self.score = 0
         self.best_score = self.start_score
         self.last_spawn_time = pygame.time.get_ticks()
         self.last_bonus_spawn_time = pygame.time.get_ticks()
-        self.base_spawn_interval = 2200
-        self.min_spawn_interval = 700
-        self.base_bonus_interval = 3600
-        self.min_bonus_interval = 1400
-        self.player_speed = 2
+        self.base_spawn_interval = BASE_SPAWN_INTERVAL
+        self.min_spawn_interval = MIN_SPAWN_INTERVAL
+        self.base_bonus_interval = BASE_BONUS_INTERVAL
+        self.min_bonus_interval = MIN_BONUS_INTERVAL
+        self.player_speed = PLAYER_START_SPEED
         self.start_speed = self.player_speed
-        self.max_speed = 15
-        self.min_speed = 2
-        self.speed_acceleration = 0.07
-        self.speed_coast_deceleration = 0.03
-        self.speed_brake_deceleration = 0.3
+        self.max_speed = PLAYER_MAX_SPEED
+        self.min_speed = PLAYER_MIN_SPEED
+        self.speed_acceleration = SPEED_ACCELERATION
+        self.speed_coast_deceleration = SPEED_COAST_DECELERATION
+        self.speed_brake_deceleration = SPEED_BRAKE_DECELERATION
         # Коэффициент сглаживания скорости: меньше = плавнее, но с задержкой реакции
-        self.speed_smoothing = 0.08
+        self.speed_smoothing = SPEED_SMOOTHING
         self.throttle = 0.0
-        self.throttle_up_rate = 0.02
-        self.throttle_coast_rate = 0.008
-        self.throttle_brake_rate = 0.05
-        self.max_lift = 36
-        self.lift_smoothing = 0.08
-        self.coast_smoothing = 0.035
-        self.brake_smoothing = 0.18
-        self.enemy_speed = 5
+        self.throttle_up_rate = THROTTLE_UP_RATE
+        self.throttle_coast_rate = THROTTLE_COAST_RATE
+        self.throttle_brake_rate = THROTTLE_BRAKE_RATE
+        self.max_lift = MAX_LIFT
+        self.lift_smoothing = LIFT_SMOOTHING
+        self.coast_smoothing = COAST_SMOOTHING
+        self.brake_smoothing = BRAKE_SMOOTHING
+        self.enemy_speed = ENEMY_DEFAULT_SPEED
 
     def build_spawn_lanes(self):
         """Рассчитать допустимые координаты спавна по горизонтали."""
         road_left = WIDTH // 2 - self.road.image.get_width() // 2
         road_right = WIDTH // 2 + self.road.image.get_width() // 2
         # Границы спавна: с отступом от игрока и краёв дороги, чтобы не появляться «в упор»
-        self.spawn_left_bound = road_left + self.player.rect.width + 140
-        self.spawn_right_bound = road_right - self.player.rect.width - 220
+        self.spawn_left_bound = road_left + self.player.rect.width + SPAWN_LEFT_SAFE_OFFSET
+        self.spawn_right_bound = road_right - self.player.rect.width - SPAWN_RIGHT_SAFE_OFFSET
         max_x = self.spawn_right_bound - self.enemy_image.get_width()
-        lane_count = 5
+        lane_count = LANE_COUNT
         lane_step = (max_x - self.spawn_left_bound) / max(1, lane_count - 1)
         return [
             int(round(self.spawn_left_bound + lane_step * index))
@@ -505,7 +447,7 @@ class Game:
         x = self.spawn_lane_bag.draw()
         y = -self.enemy_image.get_height()
         # Проактивная проверка: не спавним врага поверх другого — предотвращает наложения «из коробки»
-        if not self._can_spawn_at(x, y, margin=20):
+        if not self._can_spawn_at(x, y, margin=PLAYER_SIDE_MARGIN):
             return
         self.enemies.append(
             Enemy(
@@ -526,7 +468,7 @@ class Game:
             self.ga.evolve()
             self.best_enemy_genome = self.ga.get_best_genome()
 
-    def spawn_floating_text(self, text, pos, color=(255, 255, 255), lifespan=900):
+    def spawn_floating_text(self, text, pos, color=FLOATING_TEXT_COLOR, lifespan=FLOATING_TEXT_LIFESPAN):
         """Добавить плавающий текст."""
         ft = FloatingText(text, pos, color=color, lifespan=lifespan)
         self.floating_texts.append(ft)
@@ -539,7 +481,7 @@ class Game:
     def spawn_bonus(self):
         """Создать бонус."""
         x = self.bonus_lane_bag.draw()
-        y = -34
+        y = -BONUS_SIZE
         self.bonuses.append(Bonus(x, y, self.bonus_rng))
 
     def spawn_bonus_group(self):
@@ -657,7 +599,7 @@ class Game:
             if collision_enemy in self.enemies:
                 self.enemies.remove(collision_enemy)
             self.spawn_floating_text(
-                f"-{dmg} HP", (self.player.rect.centerx, self.player.rect.top - 56)
+                f"-{dmg} HP", (self.player.rect.centerx, self.player.rect.top - FLOATING_TEXT_OFFSET_HIT)
             )
             impact_x = (self.player.rect.centerx + collision_enemy.rect.centerx) // 2
             impact_y = (self.player.rect.centery + collision_enemy.rect.centery) // 2
@@ -665,17 +607,17 @@ class Game:
                 self.fire_image, self.fire_image.get_rect(center=(impact_x, impact_y))
             )
             pygame.display.flip()
-            pygame.time.delay(120)  # Короткая пауза для визуального эффекта удара
+            pygame.time.delay(CRASH_DISPLAY_DELAY)  # Короткая пауза для визуального эффекта удара
             if self.player.health <= 0:
                 self.show_crash_effect_and_pause(collision_enemy)
         collision_bonus = self.get_collision_bonus()
         if collision_bonus is not None:
             score_inc, heal = self.collect_bonus(collision_bonus)
             self.spawn_floating_text(
-                f"+{heal} HP", (self.player.rect.centerx, self.player.rect.top - 72)
+                f"+{heal} HP", (self.player.rect.centerx, self.player.rect.top - FLOATING_TEXT_OFFSET_HEAL)
             )
             self.spawn_floating_text(
-                f"+{score_inc}", (self.player.rect.centerx, self.player.rect.top - 44)
+                f"+{score_inc}", (self.player.rect.centerx, self.player.rect.top - FLOATING_TEXT_OFFSET_SCORE)
             )
         # Фильтрация ушедших за экран: используем list comprehension для чистоты
         self.enemies = [e for e in self.enemies if not e.is_off_screen()]
@@ -688,7 +630,7 @@ class Game:
 
     def draw(self):
         """Отрисовать всё: фон -> объекты -> игрок -> UI -> плавающие тексты."""
-        self.display.fill((0, 0, 0))
+        self.display.fill(BACKGROUND_COLOR)
         self.road.draw(self.display)
         for enemy in self.enemies:
             enemy.draw(self.display)
@@ -753,17 +695,17 @@ class Game:
         """Обработать сбор бонуса: очки + лечение с гауссовым разбросом."""
         if bonus in self.bonuses:
             self.bonuses.remove(bonus)
-            score_gain = 5 + int(self.player_speed // 5)
+            score_gain = BONUS_SCORE_BASE + int(self.player_speed // 5)
             self.score += score_gain
             self.best_score = max(self.score, self.best_score)
-            # Лечение: среднее 20, отклонение 5, ограничение [5, 40] — предсказуемо, но с вариативностью
-            heal = int(round(self.bonus_rng.gauss(20.0, 5.0)))
-            heal = max(5, min(heal, 40))
+            # Лечение: среднее, отклонение и границы берём из констант
+            heal = int(round(self.bonus_rng.gauss(BONUS_HEAL_MEAN, BONUS_HEAL_STD)))
+            heal = max(BONUS_HEAL_MIN, min(heal, BONUS_HEAL_MAX))
             self.player.health = min(self.player.max_health, self.player.health + heal)
             return score_gain, heal
         return 0, 0
 
-    def _can_spawn_at(self, x, y, margin=20):
+    def _can_spawn_at(self, x, y, margin=PLAYER_SIDE_MARGIN):
         """Проверить, свободна ли зона спавна — проактивная защита от наложений."""
         spawn_rect = pygame.Rect(
             x, y, self.enemy_image.get_width(), self.enemy_image.get_height()
@@ -778,7 +720,7 @@ class Game:
                 return False
         return True
 
-    def _resolve_enemy_overlaps(self, min_gap=12):
+    def _resolve_enemy_overlaps(self, min_gap=ENEMY_MIN_GAP):
         """
         Жёсткое разделение врагов: гарантирует минимальный зазор и убирает тряску.
         Алгоритм: если расстояние между центрами меньше допустимого — раздвигаем
@@ -841,25 +783,23 @@ class Game:
 
     def show_score_and_speed(self):
         """Отрисовать UI: счёт, рекорд, здоровье, скорость."""
-        font = pygame.font.SysFont(None, 36)
+        font = self.ui_font
+        self.display.blit(font.render(f"Score: {self.score}", True, UI_TEXT_COLOR), UI_SCORE_POS)
         self.display.blit(
-            font.render(f"Score: {self.score}", True, (255, 255, 255)), (10, 10)
+            font.render(f"Best score: {self.best_score}", True, UI_TEXT_COLOR),
+            UI_BEST_SCORE_POS,
         )
-        self.display.blit(
-            font.render(f"Best score: {self.best_score}", True, (255, 255, 255)),
-            (10, 35),
-        )
-        hb_x, hb_y, hb_w, hb_h = 10, 70, 220, 14
-        pygame.draw.rect(self.display, (60, 60, 60), (hb_x, hb_y, hb_w, hb_h))
+        hb_x, hb_y, hb_w, hb_h = UI_HEALTH_BAR
+        pygame.draw.rect(self.display, UI_HEALTH_BG_COLOR, (hb_x, hb_y, hb_w, hb_h))
         health_ratio = max(0.0, min(1.0, self.player.health / self.player.max_health))
         pygame.draw.rect(
             self.display,
-            (50, 205, 50),
+            UI_HEALTH_COLOR,
             (hb_x + 2, hb_y + 2, int((hb_w - 4) * health_ratio), hb_h - 4),
         )
         self.display.blit(
-            font.render(f"Speed: {self.player_speed * 7:.2f}", True, (255, 255, 255)),
-            (10, HEIGHT - 30),
+            font.render(f"Speed: {self.player_speed * SPEED_DISPLAY_MULT:.2f}", True, UI_TEXT_COLOR),
+            UI_SPEED_POS,
         )
 
     def run(self):

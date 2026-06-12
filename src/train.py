@@ -11,10 +11,10 @@ pygame.display.set_caption("Button test")
 
 
 green_button = ImageButton(
-    WIDTH/2-(252/2),
-    100,
-    252,
-    74,
+    WIDTH/2-(500/2),
+    -150,
+    500,
+    740,
     "",
     "assets/green_button.png",
     "assets/green_button_hover.png",
@@ -37,9 +37,12 @@ def main_menu():
                 pygame.quit()
                 sys.exit()
 
+            if event.type == pygame.USEREVENT and event.button == green_button:
+                print("Кнопка была нажата")
+
             green_button.handle_event(event)
 
-        # Для реалгирования кнопки на наведение мыши
+        # Для реагирования кнопки на наведение мыши
         green_button.check_hover(pygame.mouse.get_pos())
         green_button.draw(screen)
         pygame.display.flip()

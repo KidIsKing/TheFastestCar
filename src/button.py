@@ -1,8 +1,18 @@
 import pygame
 
 
-class ImageButton():
-    def __init__(self, x, y, width, height, text, image_path, hover_image_path=None, sound_path=None):
+class ImageButton:
+    def __init__(
+        self,
+        x,
+        y,
+        width,
+        height,
+        text,
+        image_path,
+        hover_image_path=None,
+        sound_path=None,
+    ):
         self.x = x
         self.y = y
         self.width = width
@@ -34,7 +44,11 @@ class ImageButton():
         self.is_hovered = self.rect.collidepoint(mouse_pos)
 
     def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.is_hovered:
+        if (
+            event.type == pygame.MOUSEBUTTONDOWN
+            and event.button == 1
+            and self.is_hovered
+        ):
             if self.sound:
                 self.sound.play()
             pygame.event.post(pygame.event.Event(pygame.USEREVENT, button=self))

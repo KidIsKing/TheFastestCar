@@ -8,13 +8,13 @@ import pygame
 import random
 
 
-WIDTH, HEIGHT = 1664, 928
+WIDTH, HEIGHT = 1500, 900
 FPS = 60
 
 ASSETS_PATH = "assets/"
 ASSETS = {
-    "road": ASSETS_PATH + "road_background2.png",
-    "player": ASSETS_PATH + "car_player.png",
+    "road": ASSETS_PATH + "road.png",
+    "player": ASSETS_PATH + "player_car.png",
     "enemy": ASSETS_PATH + "enemy_player.png",
     "fire": ASSETS_PATH + "fire.png",
 }
@@ -200,10 +200,9 @@ class Player:
     def __init__(self):
         """Загрузить спрайт, инициализировать позицию, здоровье, хитбокс."""
         image = pygame.image.load(ASSETS["player"])
-        image = pygame.transform.rotate(image, 90)
-        image = pygame.transform.smoothscale(
-            image, (int(image.get_width() * 0.3), int(image.get_width() * 0.5))
-        )
+        # image = pygame.transform.smoothscale(
+        #     image, (int(image.get_width() * 0.3), int(image.get_width() * 0.5))
+        # )
         self.image = image
         self.rect = self.image.get_rect()
         self.start_x = WIDTH // 2 - 90
@@ -394,7 +393,7 @@ class Road:
     def __init__(self):
         """Загрузить и масштабировать спрайт."""
         image = pygame.image.load(ASSETS["road"])
-        self.image = pygame.transform.smoothscale(image, ((WIDTH // 2) + 450, HEIGHT))
+        self.image = pygame.transform.smoothscale(image, (WIDTH, HEIGHT))
         self.y1 = 0
         self.y2 = self.image.get_height()
         self.speed = 5

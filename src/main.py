@@ -219,8 +219,6 @@ class MenuManager:
     def draw_main_menu(self):
         """Отрисовка главного меню."""
         self.draw_background(self.main_background)
-
-        # Текст главного меню
         self.draw_text("TheFastestCar. Главное меню", self.first_font, WHITE, 100, 110)
         self.draw_text(
             "by Яна Масалова. Игра для экзамена по программированию",
@@ -229,17 +227,13 @@ class MenuManager:
             100,
             200,
         )
-
         # Обработка и отрисовка кнопок
         self.draw_buttons()
 
     def draw_settings_menu(self):
         """Отрисовка меню настроек."""
         self.draw_background(self.main_background)
-
-        # Текст меню настроек
         self.draw_text("Настройки", self.first_font, WHITE, 535, 110)
-
         # Обработка и отрисовка кнопок
         self.draw_buttons()
 

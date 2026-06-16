@@ -13,7 +13,7 @@ class TestSpawnLogic:
 
     def test_spawn_interval_decreases_with_speed(self):
         """Интервал спавна уменьшается при росте скорости."""
-        from src.main import Game  # ← обновлённый импорт
+        from src.old_main import Game
         import pygame
 
         pygame.init()
@@ -29,7 +29,7 @@ class TestSpawnLogic:
 
     def test_spawn_count_increases_with_speed(self):
         """Количество врагов в группе растёт со скоростью."""
-        from src.main import Game  # ← обновлённый импорт
+        from src.old_main import Game
         import pygame
 
         pygame.init()
@@ -53,7 +53,7 @@ class TestPlayerMovement:
 
     def test_player_stays_within_road(self):
         """Игрок не может выйти за границы дороги."""
-        from src.main import Player, WIDTH  # ← обновлённый импорт
+        from src.old_main import Player, WIDTH
         import pygame
 
         pygame.init()

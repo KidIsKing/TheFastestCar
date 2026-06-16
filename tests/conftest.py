@@ -19,7 +19,7 @@ def deterministic_rng():
 @pytest.fixture
 def weighted_table_cls():
     """Импортируем класс взвешенного выбора."""
-    from src.main import WeightedChoiceTable
+    from src.old_main import WeightedChoiceTable
 
     return WeightedChoiceTable
 
@@ -27,7 +27,7 @@ def weighted_table_cls():
 @pytest.fixture
 def shuffle_bag_cls():
     """Импортируем класс ShuffleBag."""
-    from src.main import ShuffleBag
+    from src.old_main import ShuffleBag
 
     return ShuffleBag
 
@@ -35,7 +35,7 @@ def shuffle_bag_cls():
 @pytest.fixture
 def ga_cls():
     """Импортируем генетический алгоритм."""
-    from src.main import GeneticAlgorithm
+    from src.old_main import GeneticAlgorithm
 
     return GeneticAlgorithm
 
@@ -43,6 +43,6 @@ def ga_cls():
 @pytest.fixture
 def enemy_genome_cls():
     """Импортируем геном врага."""
-    from src.main import EnemyGenome
+    from src.old_main import EnemyGenome
 
     return EnemyGenome

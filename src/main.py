@@ -19,6 +19,8 @@ FPS = 60
 # Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
 # Fade
 FADE_SPEED = 10
 MAX_FADE_ALPHA = 150
@@ -40,7 +42,7 @@ ASSETS = {
 
 
 # Алгоритм 1. Проверка столкновения двух AABB-прямоугольников (Axis-Aligned Bounding Box).
-def aabb_collide(rect1, rect2):
+def aabb_collide(hitbox1, hitbox2):
     """
     Проверка столкновения двух AABB-прямоугольников (Axis-Aligned Bounding Box).
 
@@ -51,10 +53,10 @@ def aabb_collide(rect1, rect2):
     Возвращает True, если прямоугольники пересекаются.
     """
     return (
-        rect1.left <= rect2.right
-        and rect1.right >= rect2.left
-        and rect1.top <= rect2.bottom
-        and rect1.bottom >= rect2.top
+        hitbox1.left <= hitbox2.right
+        and hitbox1.right >= hitbox2.left
+        and hitbox1.top <= hitbox2.bottom
+        and hitbox1.bottom >= hitbox2.top
     )
 
 
@@ -65,13 +67,18 @@ class Player:
         self.image = pygame.transform.smoothscale(
             self.image, (self.image.get_width() * 0.35, self.image.get_height() * 0.35)
         )
+
         self.x = WIDTH // 2 - self.image.get_width() // 2
         self.y = START_Y_POS_PLAYER
         self.rect = self.image.get_rect(topleft=(self.x, self.y))
+        self.hitbox = self.rect.inflate(-110, 0)  # уменьшаем хитбокс на 20 пикселей с двух сторон по оси OX
+        self.offset_x = -1  # смещение по оси OX для правки отображения в дебаг-режиме
+
         self.speed = 5
 
     def draw(self, screen):
-        screen.blit(self.image, self.rect.topleft)
+        draw_x = self.rect.x + self.offset_x  # учитываем смещение картинки
+        screen.blit(self.image, (draw_x, self.rect.y))
 
     def move(self):
         keys = pygame.key.get_pressed()
@@ -90,8 +97,10 @@ class Player:
         self.rect.top = max(self.rect.top, 0)
         self.rect.bottom = min(self.rect.bottom, HEIGHT)
 
+        self.hitbox.center = self.rect.center  # синхронизируем картинку и её хитбокс
 
-class Enemys:
+
+class Enemy:
     def __init__(self):
         self.image = pygame.image.load(ASSETS["enemy_car"])
         self.image = pygame.transform.rotate(self.image, 180)
@@ -100,16 +109,22 @@ class Enemys:
         )
 
         self.rect = self.image.get_rect()
+        self.hitbox = self.rect.inflate(-180, 0)
+        self.offset_x = -3  # смещение по оси OX для правки отображения в дебаг-режиме
+
         self.spawn()
 
     def spawn(self):
         """Генерация случайных параметров для появления нового врага."""
         self.rect.x = random.choice([130, 320, 510, 700])
-        self.rect.y = -100
-        self.speed = random.randint(3, 7)
+        self.rect.y = -200
+        self.speed = random.randint(5, 7)
+
+        self.hitbox.center = self.rect.center  # синхронизация
 
     def draw(self, screen):
-        screen.blit(self.image, self.rect.topleft)
+        draw_x = self.rect.x + self.offset_x  # учитываем смещение картинки
+        screen.blit(self.image, (draw_x, self.rect.y))
 
     def move(self):
         self.rect.y += self.speed
@@ -117,6 +132,8 @@ class Enemys:
         # Если враг ушёл за нижнюю границу — создаём нового
         if self.rect.top > HEIGHT:
             self.spawn()
+
+        self.hitbox.center = self.rect.center  # синхронизация
 
 
 class Road:
@@ -147,26 +164,31 @@ class Road:
 class GameManager:
     def __init__(self, screen):
         self.screen = screen
+
         self.road = Road()
         self.player = Player()
-        self.enemys = [Enemys() for _ in range(3)]
+        self.enemies = [Enemy() for _ in range(3)]
+
         self.running = True
         self.game_over = False  # Флаг окончания игры
+        self.debug_mode = False
 
     def handle_events(self, event):
         # Возврат в главное меню из игры по нажатию ESC
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.running = False
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_F1:
+            self.debug_mode = not self.debug_mode  # переключаем режим на обратное значение
 
     def check_enemies_collision(self):
         """Проверка столкновений врагов друг с другом через AABB."""
-        for i, enemy in enumerate(self.enemys):
-            for other in self.enemys[i+1:]:
-                if not aabb_collide(enemy.rect, other.rect):
+        for i, enemy in enumerate(self.enemies):
+            for other in self.enemies[i+1:]:
+                if not aabb_collide(enemy.hitbox, other.hitbox):
                     continue  # столкновения нет - идём дальше
 
                 # Определяем, кто из врагов выше, а кто ниже
-                top_enemy, bottom_enemy = (enemy, other) if enemy.rect.top < other.rect.top else (other, enemy)
+                top_enemy, bottom_enemy = (enemy, other) if enemy.hitbox.top < other.hitbox.top else (other, enemy)
 
                 top_enemy.speed = min(top_enemy.speed, bottom_enemy.speed)  # верхний враг замедляется до скорости нижнего
 
@@ -180,8 +202,8 @@ class GameManager:
         if self.game_over:
             return
 
-        for enemy in self.enemys:
-            if aabb_collide(self.player.rect, enemy.rect):
+        for enemy in self.enemies:
+            if aabb_collide(self.player.hitbox, enemy.hitbox):
                 self.game_over = True
                 self.running = False
                 return
@@ -192,7 +214,7 @@ class GameManager:
             return
 
         self.road.move()
-        for enemy in self.enemys:
+        for enemy in self.enemies:
             enemy.move()
         self.player.move()
 
@@ -200,12 +222,24 @@ class GameManager:
         self.check_enemies_collision()
         self.check_player_enemy_collision()
 
+    def draw_debug(self):
+        """Отрисовка хитбоксов в дебаг-режиме."""
+        if not self.debug_mode:
+            return  # ничего не делаем
+
+        pygame.draw.rect(self.screen, GREEN, self.player.hitbox, 2)
+
+        for enemy in self.enemies:
+            pygame.draw.rect(self.screen, RED, enemy.hitbox, 2)
+
     def draw(self):
         """Отрисовка игрового экрана."""
         self.road.draw(self.screen)
-        for enemy in self.enemys:
+        for enemy in self.enemies:
             enemy.draw(self.screen)
         self.player.draw(self.screen)
+
+        self.draw_debug()
 
     def run(self):
         """Главный процесс игры."""

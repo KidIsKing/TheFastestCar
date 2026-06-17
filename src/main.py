@@ -82,12 +82,17 @@ class Car:
     """Базовый класс для всех машин игры."""
 
     def __init__(self, image_path, scale_x, scale_y, hitbox_decrease, offset_x):
-        self.image = pygame.image.load(image_path)
-        self.image = pygame.transform.smoothscale(
-            self.image,
-            (int(self.image.get_width() * scale_x), int(self.image.get_height() * scale_y)),
+        base_image = pygame.image.load(image_path)
+        self.image_scaled = pygame.transform.smoothscale(
+            base_image,
+            (
+                int(base_image.get_width() * scale_x),
+                int(base_image.get_height() * scale_y),
+            ),
         )
-        self.image = pygame.transform.rotate(self.image, 180)
+        # Повёрнутая версия (на 180°)
+        self.image_rotated = pygame.transform.rotate(self.image_scaled, 180)
+        self.image = self.image_scaled  # по умолчанию
 
         self.rect = self.image.get_rect()
         self.hitbox = self.rect.inflate(*hitbox_decrease)  # уменьшаем хитбокс
@@ -111,6 +116,8 @@ class Player(Car):
         super().__init__(
             ASSETS["player_car"], 0.35, 0.35, PLAYER_HITBOX_DECREASE, PLAYER_OFFSET_X
         )
+        self.image = self.image_rotated  # игрок всегда повернутая картинка
+        self.rect = self.image.get_rect()  # пересоздаём rect после поворота
 
         self.rect.topleft = (
             WIDTH // 2 - self.rect.width // 2,
@@ -151,9 +158,28 @@ class Enemy(Car):
 
     def spawn(self):
         """Генерация случайных параметров для появления нового врага."""
-        self.rect.x = random.choice(LANE_POSITIONS)
         self.rect.y = -200
-        self.speed = random.randint(5, 7)
+        self.rect.x = random.choice(LANE_POSITIONS)
+
+        # Переменная, определяющая встречный ли это враг
+        is_oncoming = (
+            settings.oncoming_traffic_enabled 
+            and self.rect.x in LANE_POSITIONS[:2]
+        )
+
+        # Выбираем ориентацию картинки
+        if is_oncoming:
+            self.image = self.image_rotated
+        else:
+            self.image = self.image_scaled
+
+        # Пересоздаём rect
+        self.rect = self.image.get_rect(topleft=(self.rect.x, self.rect.y))
+
+        if is_oncoming:
+            self.speed = random.randint(5, 7)  # быстро навстречу
+        else:
+            self.speed = random.randint(4, 5)  # медленно попутно
 
         self.sync_hitbox()
 
@@ -292,6 +318,13 @@ class GameManager:
         self.draw()
 
 
+class Settings:
+    """Настройки и перменные, влияющие на игру."""
+
+    def __init__(self):
+        self.oncoming_traffic_enabled = False
+
+
 class MenuManager:
     def __init__(self):
         self.running = True
@@ -320,9 +353,8 @@ class MenuManager:
         self.start_button = self._create_button("Играть", 300, "green")
         self.settings_button = self._create_button("Настройки", 400, "green")
         self.exit_button = self._create_button("Выйти", 500, "red")
-        self.move_on_direction_button = self._create_button("Встречка", 300, "green")
-        self.left_line_button = self._create_button("Левосторонка", 400, "green")
-        self.back_button = self._create_button("Назад", 500, "green")
+        self.oncoming_traffic_button = self._create_button("Встречка", 300, "green")
+        self.back_button = self._create_button("Назад", 400, "green")
 
         self.buttons_list = []
 
@@ -368,6 +400,10 @@ class MenuManager:
                     self.start_transition("menu")
                 elif event.button == self.exit_button:
                     self.running = False
+                elif event.button == self.oncoming_traffic_button:
+                    settings.oncoming_traffic_enabled = (
+                        not settings.oncoming_traffic_enabled
+                    )
 
     def draw_background(self, background):
         """Базовая отрисовка фона"""
@@ -403,6 +439,11 @@ class MenuManager:
         """Отрисовка меню настроек."""
         self.draw_background(self.main_background)
         self.draw_text("Настройки", self.first_font, WHITE, 415, 110)
+
+        # Показываем текущее состояние встречки
+        traffic_status = "ВКЛ" if settings.oncoming_traffic_enabled else "ВЫКЛ"
+        self.draw_text(f"Встречка: {traffic_status}", self.second_font, WHITE, 440, 290)
+
         # Обработка и отрисовка кнопок
         self.draw_buttons()
 
@@ -451,8 +492,7 @@ class MenuManager:
                 self.draw_main_menu()
             elif self.window == "settings":
                 self.buttons_list = [
-                    self.move_on_direction_button,
-                    self.left_line_button,
+                    self.oncoming_traffic_button,
                     self.back_button,
                 ]
                 self.draw_settings_menu()
@@ -468,6 +508,9 @@ class MenuManager:
 
         pygame.quit()
         sys.exit()
+
+
+settings = Settings()
 
 
 def main():

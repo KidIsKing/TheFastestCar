@@ -10,20 +10,38 @@ WIDTH = 1100
 HEIGHT = 800
 
 CENTER_X_FOR_BUTTONS = 370
-START_X_POS_PLAYER = 370
 START_Y_POS_PLAYER = 600
+
+# Хитбоксы
+PLAYER_HITBOX_DECREASE = (-110, 0)
+ENEMY_HITBOX_DECREASE = (-180, 0)
+
+# Ограничения дороги
+ROAD_LEFT_BORDER = 120
+ROAD_RIGHT_BORDER = WIDTH - 120
+
+LANE_POSITIONS = [130, 320, 510, 700]  # X-координаты полос для спавна врагов
+
+# Визуальные смещения
+PLAYER_OFFSET_X = -1
+ENEMY_OFFSET_X = -3
+
+ENEMY_MIN_GAP = 5
 
 ROAD_SPEED = 4
 
 FPS = 60
+
 # Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
+
 # Fade
 FADE_SPEED = 10
 MAX_FADE_ALPHA = 150
+
 # Assets
 ASSETS_PATH = "assets/"
 ASSETS = {
@@ -60,25 +78,48 @@ def aabb_collide(hitbox1, hitbox2):
     )
 
 
-class Player:
-    def __init__(self):
-        self.image = pygame.image.load(ASSETS["player_car"])
-        self.image = pygame.transform.rotate(self.image, 180)
+class Car:
+    """Базовый класс для всех машин игры."""
+
+    def __init__(self, image_path, scale_x, scale_y, hitbox_decrease, offset_x):
+        self.image = pygame.image.load(image_path)
         self.image = pygame.transform.smoothscale(
-            self.image, (self.image.get_width() * 0.35, self.image.get_height() * 0.35)
+            self.image,
+            (int(self.image.get_width() * scale_x), int(self.image.get_height() * scale_y)),
+        )
+        self.image = pygame.transform.rotate(self.image, 180)
+
+        self.rect = self.image.get_rect()
+        self.hitbox = self.rect.inflate(*hitbox_decrease)  # уменьшаем хитбокс
+
+        self.offset_x = (
+            offset_x  # смещение по оси OX для правки отображения в дебаг-режиме
         )
 
-        self.x = WIDTH // 2 - self.image.get_width() // 2
-        self.y = START_Y_POS_PLAYER
-        self.rect = self.image.get_rect(topleft=(self.x, self.y))
-        self.hitbox = self.rect.inflate(-110, 0)  # уменьшаем хитбокс на 20 пикселей с двух сторон по оси OX
-        self.offset_x = -1  # смещение по оси OX для правки отображения в дебаг-режиме
-
-        self.speed = 5
+        self.speed = 0
 
     def draw(self, screen):
         draw_x = self.rect.x + self.offset_x  # учитываем смещение картинки
         screen.blit(self.image, (draw_x, self.rect.y))
+
+    def sync_hitbox(self):
+        self.hitbox.center = self.rect.center  # синхронизируем картинку и её хитбокс
+
+
+class Player(Car):
+    def __init__(self):
+        super().__init__(
+            ASSETS["player_car"], 0.35, 0.35, PLAYER_HITBOX_DECREASE, PLAYER_OFFSET_X
+        )
+
+        self.rect.topleft = (
+            WIDTH // 2 - self.rect.width // 2,
+            START_Y_POS_PLAYER,
+        )
+
+        self.speed = 5
+
+        self.sync_hitbox()
 
     def move(self):
         keys = pygame.key.get_pressed()
@@ -92,39 +133,29 @@ class Player:
             self.rect.y += self.speed
 
         # Ограничения движения игрока в пределах дороги
-        self.rect.left = max(self.rect.left, 120)
-        self.rect.right = min(self.rect.right, WIDTH - 120)
+        self.rect.left = max(self.rect.left, ROAD_LEFT_BORDER)
+        self.rect.right = min(self.rect.right, ROAD_RIGHT_BORDER)
         self.rect.top = max(self.rect.top, 0)
         self.rect.bottom = min(self.rect.bottom, HEIGHT)
 
-        self.hitbox.center = self.rect.center  # синхронизируем картинку и её хитбокс
+        self.sync_hitbox()
 
 
-class Enemy:
+class Enemy(Car):
     def __init__(self):
-        self.image = pygame.image.load(ASSETS["enemy_car"])
-        self.image = pygame.transform.rotate(self.image, 180)
-        self.image = pygame.transform.smoothscale(
-            self.image, (self.image.get_width() * 0.45, self.image.get_height() * 0.35)
+        super().__init__(
+            ASSETS["enemy_car"], 0.45, 0.35, ENEMY_HITBOX_DECREASE, ENEMY_OFFSET_X
         )
-
-        self.rect = self.image.get_rect()
-        self.hitbox = self.rect.inflate(-180, 0)
-        self.offset_x = -3  # смещение по оси OX для правки отображения в дебаг-режиме
 
         self.spawn()
 
     def spawn(self):
         """Генерация случайных параметров для появления нового врага."""
-        self.rect.x = random.choice([130, 320, 510, 700])
+        self.rect.x = random.choice(LANE_POSITIONS)
         self.rect.y = -200
         self.speed = random.randint(5, 7)
 
-        self.hitbox.center = self.rect.center  # синхронизация
-
-    def draw(self, screen):
-        draw_x = self.rect.x + self.offset_x  # учитываем смещение картинки
-        screen.blit(self.image, (draw_x, self.rect.y))
+        self.sync_hitbox()
 
     def move(self):
         self.rect.y += self.speed
@@ -133,7 +164,7 @@ class Enemy:
         if self.rect.top > HEIGHT:
             self.spawn()
 
-        self.hitbox.center = self.rect.center  # синхронизация
+        self.sync_hitbox()
 
 
 class Road:
@@ -178,24 +209,38 @@ class GameManager:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.running = False
         if event.type == pygame.KEYDOWN and event.key == pygame.K_F1:
-            self.debug_mode = not self.debug_mode  # переключаем режим на обратное значение
+            self.debug_mode = (
+                not self.debug_mode
+            )  # переключаем режим на обратное значение
 
     def check_enemies_collision(self):
         """Проверка столкновений врагов друг с другом через AABB."""
         for i, enemy in enumerate(self.enemies):
-            for other in self.enemies[i+1:]:
+            for other in self.enemies[i + 1 :]:
                 if not aabb_collide(enemy.hitbox, other.hitbox):
                     continue  # столкновения нет - идём дальше
 
                 # Определяем, кто из врагов выше, а кто ниже
-                top_enemy, bottom_enemy = (enemy, other) if enemy.hitbox.top < other.hitbox.top else (other, enemy)
+                top_enemy, bottom_enemy = (
+                    (enemy, other)
+                    if enemy.hitbox.top < other.hitbox.top
+                    else (other, enemy)
+                )
 
-                top_enemy.speed = min(top_enemy.speed, bottom_enemy.speed)  # верхний враг замедляется до скорости нижнего
+                self.resolve_enemies_collision(
+                    top_enemy, bottom_enemy
+                )  # разрешаем столкновение
 
-                # Устанавливаем минимальный зазор между врагами, чтобы они не слипались
-                min_gap = 5
-                if top_enemy.rect.bottom > bottom_enemy.rect.top - min_gap:
-                    top_enemy.rect.bottom = bottom_enemy.rect.top - min_gap
+    def resolve_enemies_collision(self, top_enemy, bottom_enemy):
+        """Разрешение столкновения врагов."""
+        top_enemy.speed = min(
+            top_enemy.speed, bottom_enemy.speed
+        )  # верхний враг замедляется до скорости нижнего
+
+        # Устанавливаем минимальный зазор между врагами, чтобы они не слипались
+        min_gap = ENEMY_MIN_GAP
+        if top_enemy.rect.bottom > bottom_enemy.rect.top - min_gap:
+            top_enemy.rect.bottom = bottom_enemy.rect.top - min_gap
 
     def check_player_enemy_collision(self):
         """Проверка столкновений игрока с врагами через AABB."""
@@ -272,67 +317,27 @@ class MenuManager:
         self.second_font = pygame.font.SysFont(None, 40)
 
         # Создание кнопок
-        self.start_button = ImageButton(
-            CENTER_X_FOR_BUTTONS,
-            300,
-            350,
-            100,
-            "Играть",
-            ASSETS["green_button"],
-            ASSETS["green_button_hover"],
-            ASSETS["click_sound"],
-        )
-        self.settings_button = ImageButton(
-            CENTER_X_FOR_BUTTONS,
-            400,
-            350,
-            100,
-            "Настройки",
-            ASSETS["green_button"],
-            ASSETS["green_button_hover"],
-            ASSETS["click_sound"],
-        )
-        self.exit_button = ImageButton(
-            CENTER_X_FOR_BUTTONS,
-            500,
-            350,
-            100,
-            "Выйти",
-            ASSETS["red_button"],
-            ASSETS["red_button_hover"],
-            ASSETS["click_sound"],
-        )
-        self.move_on_direction_button = ImageButton(
-            CENTER_X_FOR_BUTTONS,
-            300,
-            350,
-            100,
-            "Встречка",
-            ASSETS["green_button"],
-            ASSETS["green_button_hover"],
-            ASSETS["click_sound"],
-        )
-        self.left_line_button = ImageButton(
-            CENTER_X_FOR_BUTTONS,
-            400,
-            350,
-            100,
-            "Левосторонка",
-            ASSETS["green_button"],
-            ASSETS["green_button_hover"],
-            ASSETS["click_sound"],
-        )
-        self.back_button = ImageButton(
-            CENTER_X_FOR_BUTTONS,
-            500,
-            350,
-            100,
-            "Назад",
-            ASSETS["green_button"],
-            ASSETS["green_button_hover"],
-            ASSETS["click_sound"],
-        )
+        self.start_button = self._create_button("Играть", 300, "green")
+        self.settings_button = self._create_button("Настройки", 400, "green")
+        self.exit_button = self._create_button("Выйти", 500, "red")
+        self.move_on_direction_button = self._create_button("Встречка", 300, "green")
+        self.left_line_button = self._create_button("Левосторонка", 400, "green")
+        self.back_button = self._create_button("Назад", 500, "green")
+
         self.buttons_list = []
+
+    def _create_button(self, text, y_pos, color):
+        """Инкапсулированный метод для создания кнопок."""
+        return ImageButton(
+            CENTER_X_FOR_BUTTONS,
+            y_pos,
+            350,
+            100,
+            text,
+            ASSETS[f"{color}_button"],
+            ASSETS[f"{color}_button_hover"],
+            ASSETS["click_sound"],
+        )
 
     def start_transition(self, target):
         """Старт анимации затухания и установка целевого окна."""
@@ -451,6 +456,7 @@ class MenuManager:
                     self.back_button,
                 ]
                 self.draw_settings_menu()
+
             elif self.window == "game" and self.game_manager is not None:
                 self.buttons_list = []
                 self.game_manager.run()

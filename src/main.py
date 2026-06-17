@@ -13,6 +13,8 @@ CENTER_X_FOR_BUTTONS = 370
 START_X_POS_PLAYER = 370
 START_Y_POS_PLAYER = 600
 
+ROAD_SPEED = 4
+
 FPS = 60
 # Colors
 WHITE = (255, 255, 255)
@@ -25,7 +27,6 @@ ASSETS_PATH = "assets/"
 ASSETS = {
     # Меню
     "main_background": ASSETS_PATH + "images/background_menu.png",
-    "game_background": ASSETS_PATH + "images/road.png",
     "green_button": ASSETS_PATH + "images/buttons/green_button.png",
     "green_button_hover": ASSETS_PATH + "images/buttons/green_button_hover.png",
     "red_button": ASSETS_PATH + "images/buttons/red_button.png",
@@ -34,6 +35,7 @@ ASSETS = {
     # Игра
     "player_car": ASSETS_PATH + "images/player_car.png",
     "enemy_car": ASSETS_PATH + "images/enemy_car.png",
+    "road": ASSETS_PATH + "images/road.png",
 }
 
 
@@ -117,15 +119,39 @@ class Enemys:
             self.spawn()
 
 
+class Road:
+    def __init__(self):
+        self.image = pygame.image.load(ASSETS["road"])
+        self.rect = self.image.get_rect()
+
+        self.speed = ROAD_SPEED
+
+        self.y1 = 0
+        self.y2 = -self.image.get_height()  # вторая копия начинается сверху
+
+    def draw(self, screen):
+        screen.blit(self.image, (0, self.y1))
+        screen.blit(self.image, (0, self.y2))
+
+    def move(self):
+        self.y1 += self.speed
+        self.y2 += self.speed
+
+        # Перемещаем обе копии дороги наверх, когда они снизу вышли за экран
+        if self.y1 >= HEIGHT:
+            self.y1 = self.y2 - self.image.get_height()
+        if self.y2 >= HEIGHT:
+            self.y2 = self.y1 - self.image.get_height()
+
+
 class GameManager:
     def __init__(self, screen):
         self.screen = screen
+        self.road = Road()
         self.player = Player()
         self.enemys = [Enemys() for _ in range(3)]
         self.running = True
         self.game_over = False  # Флаг окончания игры
-
-        self.game_background = pygame.image.load(ASSETS["game_background"])
 
     def handle_events(self, event):
         # Возврат в главное меню из игры по нажатию ESC
@@ -165,6 +191,7 @@ class GameManager:
         if self.game_over:
             return
 
+        self.road.move()
         for enemy in self.enemys:
             enemy.move()
         self.player.move()
@@ -175,7 +202,7 @@ class GameManager:
 
     def draw(self):
         """Отрисовка игрового экрана."""
-        self.screen.blit(self.game_background, (0, 0))
+        self.road.draw(self.screen)
         for enemy in self.enemys:
             enemy.draw(self.screen)
         self.player.draw(self.screen)

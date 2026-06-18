@@ -443,6 +443,10 @@ class GameManager:
 
     def run(self):
         """Главный процесс игры."""
+        if not self.running:  # если игра заморожена, то не обновляем её
+            self.draw()
+            return
+
         self.update()
         self.draw()
 
@@ -602,8 +606,8 @@ class MenuManager:
                 if self.game_manager is None:
                     self.game_manager = GameManager(self.screen)
                 elif not self.game_manager.running:
-                    self.game_manager = None
-                    self.start_transition("menu")
+                    if self.transition_state is None:
+                        self.start_transition("menu")
 
             if self.window == "menu":
                 self.buttons_list = [
@@ -624,6 +628,13 @@ class MenuManager:
                 self.game_manager.run()
 
             self.apply_transition()
+
+            if (
+                self.window == "menu"
+                and self.game_manager is not None
+                and self.transition_state is None
+            ):
+                self.game_manager = None
 
             pygame.display.flip()
             self.clock.tick(FPS)

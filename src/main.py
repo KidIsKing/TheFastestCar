@@ -28,7 +28,7 @@ ENEMY_OFFSET_X = -3
 
 ENEMY_MIN_GAP = 5
 
-ROAD_SPEED = 4
+ROAD_SPEED = 8
 
 FPS = 60
 
@@ -119,10 +119,9 @@ class Player(Car):
         self.image = self.image_rotated  # игрок всегда повернутая картинка
         self.rect = self.image.get_rect()  # пересоздаём rect после поворота
 
-        self.rect.topleft = (
-            WIDTH // 2 - self.rect.width // 2,
-            START_Y_POS_PLAYER,
-        )
+        self.base_x = WIDTH // 2 - self.rect.width // 2
+        self.base_y = START_Y_POS_PLAYER
+        self.rect.topleft = (self.base_x, self.base_y)
 
         self.speed = 5
 
@@ -134,16 +133,12 @@ class Player(Car):
             self.rect.x -= self.speed
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
             self.rect.x += self.speed
-        if keys[pygame.K_UP] or keys[pygame.K_w]:
-            self.rect.y -= self.speed
-        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
-            self.rect.y += self.speed
 
         # Ограничения движения игрока в пределах дороги
         self.rect.left = max(self.rect.left, ROAD_LEFT_BORDER)
         self.rect.right = min(self.rect.right, ROAD_RIGHT_BORDER)
-        self.rect.top = max(self.rect.top, 0)
-        self.rect.bottom = min(self.rect.bottom, HEIGHT)
+
+        self.rect.y = self.base_y  # управление через GameManager
 
         self.sync_hitbox()
 
@@ -154,6 +149,9 @@ class Enemy(Car):
             ASSETS["enemy_car"], 0.45, 0.35, ENEMY_HITBOX_DECREASE, ENEMY_OFFSET_X
         )
 
+        self.base_speed = 0
+        self.is_oncoming = False  # встречка
+
         self.spawn()
 
     def spawn(self):
@@ -162,29 +160,31 @@ class Enemy(Car):
         self.rect.x = random.choice(LANE_POSITIONS)
 
         # Переменная, определяющая встречный ли это враг
-        is_oncoming = (
+        self.is_oncoming = (
             settings.oncoming_traffic_enabled 
             and self.rect.x in LANE_POSITIONS[:2]
         )
 
         # Выбираем ориентацию картинки
-        if is_oncoming:
+        if self.is_oncoming:
             self.image = self.image_rotated
+            self.base_speed = random.randint(5, 7)  # встречные быстрее
         else:
             self.image = self.image_scaled
+            self.base_speed = random.randint(3, 5)  # попутные медленнее
 
         # Пересоздаём rect
         self.rect = self.image.get_rect(topleft=(self.rect.x, self.rect.y))
 
-        if is_oncoming:
-            self.speed = random.randint(5, 7)  # быстро навстречу
-        else:
-            self.speed = random.randint(4, 5)  # медленно попутно
-
         self.sync_hitbox()
 
-    def move(self):
-        self.rect.y += self.speed
+    def move(self, world_speed):
+        if self.is_oncoming:
+            visual_speed = self.base_speed + world_speed
+        else:
+            visual_speed = world_speed - self.base_speed
+
+        self.rect.y += visual_speed
 
         # Если враг ушёл за нижнюю границу — создаём нового
         if self.rect.top > HEIGHT:
@@ -207,9 +207,9 @@ class Road:
         screen.blit(self.image, (0, self.y1))
         screen.blit(self.image, (0, self.y2))
 
-    def move(self):
-        self.y1 += self.speed
-        self.y2 += self.speed
+    def move(self, world_speed):
+        self.y1 += world_speed
+        self.y2 += world_speed
 
         # Перемещаем обе копии дороги наверх, когда они снизу вышли за экран
         if self.y1 >= HEIGHT:
@@ -229,6 +229,9 @@ class GameManager:
         self.running = True
         self.game_over = False  # Флаг окончания игры
         self.debug_mode = False
+
+        self.current_world_speed = settings.base_world_speed
+        self.player_visual_offset_y = 0
 
     def handle_events(self, event):
         # Возврат в главное меню из игры по нажатию ESC
@@ -279,15 +282,62 @@ class GameManager:
                 self.running = False
                 return
 
+    def _update_world_speed(self):
+        """Изменение скорости всех объектов по нажатию клавиш вверх и вниз."""
+        keys = pygame.key.get_pressed()
+
+        # Определяем целевую скорость и плавность
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            target_speed = settings.max_world_speed
+            smoothing = settings.acceleration_smoothing
+        elif keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            target_speed = settings.min_world_speed
+            smoothing = settings.deceleration_smoothing
+        else:
+            target_speed = settings.base_world_speed
+            smoothing = settings.deceleration_smoothing
+
+        # Плавное изменение скорости
+        self.current_world_speed += (target_speed - self.current_world_speed) * smoothing
+
+        # Ограничения
+        self.current_world_speed = max(
+            settings.min_world_speed,
+            min(settings.max_world_speed, self.current_world_speed)
+        )
+
+    def _update_player_visual_offset(self):
+        """Визуальное смещение игрока при разгоне и замедлении."""
+        speed_range = settings.max_world_speed - settings.base_world_speed
+
+        if speed_range == 0:
+            speed_ratio = 0
+        else:
+            speed_ratio = (self.current_world_speed - settings.base_world_speed) / speed_range
+
+        offset_ratio = speed_ratio ** 2
+
+        target_offset = settings.max_player_offset_y * offset_ratio
+
+        self.player_visual_offset_y += (target_offset - self.player_visual_offset_y) * 0.1
+
     def update(self):
         """Обновление состояния игры."""
         if self.game_over:
             return
 
-        self.road.move()
+        # Обновляем скорость и смещение
+        self._update_world_speed()
+        self._update_player_visual_offset()
+
+        self.road.move(self.current_world_speed)
         for enemy in self.enemies:
-            enemy.move()
+            enemy.move(self.current_world_speed)
         self.player.move()
+
+        # Смещение игрока
+        self.player.rect.y = self.player.base_y - self.player_visual_offset_y
+        self.player.sync_hitbox()
 
         # Проверки коллизий через AABB
         self.check_enemies_collision()
@@ -316,13 +366,6 @@ class GameManager:
         """Главный процесс игры."""
         self.update()
         self.draw()
-
-
-class Settings:
-    """Настройки и перменные, влияющие на игру."""
-
-    def __init__(self):
-        self.oncoming_traffic_enabled = False
 
 
 class MenuManager:
@@ -508,6 +551,23 @@ class MenuManager:
 
         pygame.quit()
         sys.exit()
+
+
+class Settings:
+    """Настройки и переменные, влияющие на игру."""
+
+    def __init__(self):
+        self.oncoming_traffic_enabled = False
+
+        # Параметры логики скорости
+        self.base_world_speed = 8
+        self.max_world_speed = 18
+        self.min_world_speed = 3
+
+        self.acceleration_smoothing = 0.03  # плавность разгона
+        self.deceleration_smoothing = 0.05  # плавность торможения
+
+        self.max_player_offset_y = 100  # смещение по OY при разгоне
 
 
 settings = Settings()

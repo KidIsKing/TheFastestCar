@@ -30,6 +30,14 @@ ENEMY_MIN_GAP = 5
 
 ROAD_SPEED = 8
 
+# Параметры скорости
+BASE_WORLD_SPEED = 8
+MAX_WORLD_SPEED = 18
+MIN_WORLD_SPEED = 3
+ACCELERATION_SMOOTHING = 0.03
+DECELERATION_SMOOTHING = 0.05
+MAX_PLAYER_OFFSET_Y = 100
+
 FPS = 60
 
 # Colors
@@ -226,14 +234,50 @@ class GameManager:
         self.player = Player()
         self.enemies = [Enemy() for _ in range(3)]
 
+        self.current_world_speed = settings.base_world_speed
+        self.player_visual_offset_y = 0
+
+        self.collided_enemy = None  # враг, с которым столкнулся игрок
+
         self.running = True
         self.game_over = False  # Флаг окончания игры
         self.debug_mode = False
 
-        self.current_world_speed = settings.base_world_speed
-        self.player_visual_offset_y = 0
+        # Game Over
+        self.restart_button = ImageButton(
+            CENTER_X_FOR_BUTTONS, 330, 350, 100, "Начать заново",
+            ASSETS["green_button"],
+            ASSETS["green_button_hover"],
+            ASSETS["click_sound"],
+        )
+        self.to_menu_button = ImageButton(
+            CENTER_X_FOR_BUTTONS, 430, 350, 100, "Выйти в меню",
+            ASSETS["green_button"],
+            ASSETS["green_button_hover"],
+            ASSETS["click_sound"],
+        )
+        self.game_over_buttons = [self.restart_button, self.to_menu_button]
+
+        self.game_over_font = pygame.font.SysFont(None, 96)
+        self.game_over_panel_rect = pygame.Rect(WIDTH // 2 - 250, HEIGHT // 2 - 200, 500, 400)
 
     def handle_events(self, event):
+        """Обработка нажатий клавиш."""
+        if self.game_over:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.running = False
+                return
+
+            for button in self.game_over_buttons:
+                button.handle_event(event)
+
+            if event.type == pygame.USEREVENT:
+                if event.button == self.restart_button:
+                    self.restart_game()
+                if event.button == self.to_menu_button:
+                    self.running = False
+            return
+
         # Возврат в главное меню из игры по нажатию ESC
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.running = False
@@ -241,6 +285,15 @@ class GameManager:
             self.debug_mode = (
                 not self.debug_mode
             )  # переключаем режим на обратное значение
+
+    def restart_game(self):
+        self.player = Player()
+        self.enemies = [Enemy() for _ in range(3)]
+        self.road = Road()
+        self.collided_enemy = None
+        self.current_world_speed = settings.base_world_speed
+        self.player_visual_offset_y = 0
+        self.game_over = False
 
     def check_enemies_collision(self):
         """Проверка столкновений врагов друг с другом через AABB."""
@@ -279,7 +332,7 @@ class GameManager:
         for enemy in self.enemies:
             if aabb_collide(self.player.hitbox, enemy.hitbox):
                 self.game_over = True
-                self.running = False
+                self.collided_enemy = enemy
                 return
 
     def _update_world_speed(self):
@@ -324,6 +377,9 @@ class GameManager:
     def update(self):
         """Обновление состояния игры."""
         if self.game_over:
+            for enemy in self.enemies:
+                if enemy is not self.collided_enemy:
+                    enemy.move(self.current_world_speed * 0.02)  # нетронутые враги продолжают двигаться
             return
 
         # Обновляем скорость и смещение
@@ -353,6 +409,26 @@ class GameManager:
         for enemy in self.enemies:
             pygame.draw.rect(self.screen, RED, enemy.hitbox, 2)
 
+    def draw_game_over_screen(self):
+        """Отрисовка окошка окончания игры."""
+        # Полупрозрачный тёмный фон поверх всей игры
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.fill(BLACK)
+        overlay.set_alpha(150)
+        self.screen.blit(overlay, (0, 0))
+
+        pygame.draw.rect(self.screen, WHITE, self.game_over_panel_rect)
+        pygame.draw.rect(self.screen, BLACK, self.game_over_panel_rect, 3)  # рамка
+
+        text_surface = self.game_over_font.render("Game Over", True, BLACK)
+        text_x = self.game_over_panel_rect.centerx - text_surface.get_width() // 2
+        text_y = self.game_over_panel_rect.top + 40
+        self.screen.blit(text_surface, (text_x, text_y))
+
+        for button in self.game_over_buttons:
+            button.check_hover(pygame.mouse.get_pos())
+            button.draw(self.screen)
+
     def draw(self):
         """Отрисовка игрового экрана."""
         self.road.draw(self.screen)
@@ -361,6 +437,9 @@ class GameManager:
         self.player.draw(self.screen)
 
         self.draw_debug()
+
+        if self.game_over:
+            self.draw_game_over_screen()
 
     def run(self):
         """Главный процесс игры."""
@@ -560,14 +639,14 @@ class Settings:
         self.oncoming_traffic_enabled = False
 
         # Параметры логики скорости
-        self.base_world_speed = 8
-        self.max_world_speed = 18
-        self.min_world_speed = 3
+        self.base_world_speed = BASE_WORLD_SPEED
+        self.max_world_speed = MAX_WORLD_SPEED
+        self.min_world_speed = MIN_WORLD_SPEED
 
-        self.acceleration_smoothing = 0.03  # плавность разгона
-        self.deceleration_smoothing = 0.05  # плавность торможения
+        self.acceleration_smoothing = ACCELERATION_SMOOTHING  # плавность разгона
+        self.deceleration_smoothing = DECELERATION_SMOOTHING  # плавность торможения
 
-        self.max_player_offset_y = 100  # смещение по OY при разгоне
+        self.max_player_offset_y = MAX_PLAYER_OFFSET_Y  # смещение по OY при разгоне
 
 
 settings = Settings()

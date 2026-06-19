@@ -241,6 +241,7 @@ class GameManager:
 
         self.running = True
         self.game_over = False  # Флаг окончания игры
+        self.game_pause = False  # Флаг паузы
         self.debug_mode = False
 
         # Game Over
@@ -256,13 +257,21 @@ class GameManager:
             ASSETS["green_button_hover"],
             ASSETS["click_sound"],
         )
+        self.continue_button = ImageButton(
+            CENTER_X_FOR_BUTTONS, 330, 350, 100, "Продолжить",
+            ASSETS["green_button"],
+            ASSETS["green_button_hover"],
+            ASSETS["click_sound"],
+        )
         self.game_over_buttons = [self.restart_button, self.to_menu_button]
+        self.game_pause_buttons = [self.continue_button, self.to_menu_button]
 
         self.game_over_font = pygame.font.SysFont(None, 96)
         self.game_over_panel_rect = pygame.Rect(WIDTH // 2 - 250, HEIGHT // 2 - 200, 500, 400)
 
     def handle_events(self, event):
         """Обработка нажатий клавиш."""
+        # Обработка экранчика проигрыша
         if self.game_over:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.running = False
@@ -278,9 +287,27 @@ class GameManager:
                     self.running = False
             return
 
-        # Возврат в главное меню из игры по нажатию ESC
+        # Обработка экранчика паузы
+        if self.game_pause:
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.game_pause = False
+                return
+
+            for button in self.game_pause_buttons:
+                button.handle_event(event)
+
+            if event.type == pygame.USEREVENT:
+                if event.button == self.continue_button:
+                    self.game_pause = False
+                if event.button == self.to_menu_button:
+                    self.running = False
+            return
+
+        # Запуск окошка паузы при нажатии ESC
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-            self.running = False
+            self.game_pause = True
+
+        # Включение/выключение дебаг-режима
         if event.type == pygame.KEYDOWN and event.key == pygame.K_F1:
             self.debug_mode = (
                 not self.debug_mode
@@ -409,7 +436,7 @@ class GameManager:
         for enemy in self.enemies:
             pygame.draw.rect(self.screen, RED, enemy.hitbox, 2)
 
-    def draw_game_over_screen(self):
+    def draw_overlay_screen(self, text, buttons_list):
         """Отрисовка окошка окончания игры."""
         # Полупрозрачный тёмный фон поверх всей игры
         overlay = pygame.Surface((WIDTH, HEIGHT))
@@ -420,12 +447,12 @@ class GameManager:
         pygame.draw.rect(self.screen, WHITE, self.game_over_panel_rect)
         pygame.draw.rect(self.screen, BLACK, self.game_over_panel_rect, 3)  # рамка
 
-        text_surface = self.game_over_font.render("Game Over", True, BLACK)
+        text_surface = self.game_over_font.render(text, True, BLACK)
         text_x = self.game_over_panel_rect.centerx - text_surface.get_width() // 2
         text_y = self.game_over_panel_rect.top + 40
         self.screen.blit(text_surface, (text_x, text_y))
 
-        for button in self.game_over_buttons:
+        for button in buttons_list:
             button.check_hover(pygame.mouse.get_pos())
             button.draw(self.screen)
 
@@ -439,11 +466,13 @@ class GameManager:
         self.draw_debug()
 
         if self.game_over:
-            self.draw_game_over_screen()
+            self.draw_overlay_screen("Game Over", self.game_over_buttons)
+        elif self.game_pause:
+            self.draw_overlay_screen("Pause", self.game_pause_buttons)
 
     def run(self):
         """Главный процесс игры."""
-        if not self.running:  # если игра заморожена, то не обновляем её
+        if self.game_pause or not self.running:  # если игра заморожена, то не обновляем её
             self.draw()
             return
 
@@ -509,6 +538,9 @@ class MenuManager:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+            
+            if self.window == "settings" and event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.start_transition("menu")
 
             if self.window == "game" and self.game_manager is not None:
                 self.game_manager.handle_events(event)

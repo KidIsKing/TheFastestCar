@@ -150,6 +150,7 @@ class Enemy(Car):
 
 
 class Road:
+    """Дорога."""
     def __init__(self):
         self.image = pygame.image.load(ASSETS["road"])
         self.rect = self.image.get_rect()
@@ -175,21 +176,28 @@ class Road:
 
 
 class Bonus:
-    def __init__(self, image_path):
+    """Бонус."""
+    scale_x = 0.3
+    scale_y = 0.3
+
+    def __init__(self, image_path, effects_type):
         self.image = pygame.image.load(image_path)
         self.image = pygame.transform.smoothscale(
             self.image,
-            (int(self.image.get_width() * 0.3), int(self.image.get_height() * 0.3))
+            (int(self.image.get_width() * self.scale_x), int(self.image.get_height() * self.scale_y))
         )
 
         self.rect = self.image.get_rect()
+        self.hitbox = self.rect.inflate(-10, -10)
         self.speed = 0
+
+        self.effects_type = effects_type
 
         self.spawn()
 
     def spawn(self):
         self.rect.y = -200
-        self.rect.x = random.randint(50, 850)
+        self.rect.x = random.randint(150, 850)
 
     def move(self, world_speed):
         self.rect.y += world_speed

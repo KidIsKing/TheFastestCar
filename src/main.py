@@ -25,6 +25,9 @@ from constants import (
     FADE_SPEED,
     MAX_FADE_ALPHA,
     ASSETS,
+    MAX_BONUSES_COUNT,
+    MIN_BONUSES_COUNT,
+    BONUS_TYPES
 )
 
 
@@ -173,8 +176,11 @@ class GameManager:
         self.player = Player()
         self.enemies = [Enemy() for _ in range(3)]
         self.health_bar = HealthBar(PLAYER_MAX_HEALTH)
-        self.hp = Bonus(ASSETS["hp"])
-        self.ex = Bonus(ASSETS["ex"])
+        bonus_types = BONUS_TYPES
+        self.bonuses = []
+        for _ in range(random.randint(MIN_BONUSES_COUNT, MAX_BONUSES_COUNT)):
+            bonus_type = random.choice(bonus_types)
+            self.bonuses.append(Bonus(ASSETS[bonus_type], bonus_type))
 
         self.current_world_speed = settings.base_world_speed
         self.player_visual_offset_y = 0
@@ -236,8 +242,11 @@ class GameManager:
         self.player = Player()
         self.enemies = [Enemy() for _ in range(3)]
         self.road = Road()
-        self.hp = Bonus(ASSETS["hp"], "hp")
-        self.ex = Bonus(ASSETS["ex"], "ex")
+        bonus_types = BONUS_TYPES
+        self.bonuses = []
+        for _ in range(random.randint(MIN_BONUSES_COUNT, MAX_BONUSES_COUNT)):
+            bonus_type = random.choice(bonus_types)
+            self.bonuses.append(Bonus(ASSETS[bonus_type], bonus_type))
         self.health_bar.update(PLAYER_MAX_HEALTH)
         self.collided_enemy = None
         self.current_world_speed = settings.base_world_speed
@@ -247,7 +256,7 @@ class GameManager:
     def calculate_damage(self):
         """Расчёт урона с гауссовым распределением."""
         damage = random.gauss(BASE_DAMAGE, DAMAGE_SPREAD)
-        damage = max(DAMAGE_MIN, max(DAMAGE_MAX, int(damage)))
+        damage = max(DAMAGE_MIN, min(DAMAGE_MAX, int(damage)))
         return damage
 
     def check_enemies_collision(self):
@@ -279,7 +288,20 @@ class GameManager:
         if top_enemy.rect.bottom > bottom_enemy.rect.top - min_gap:
             top_enemy.rect.bottom = bottom_enemy.rect.top - min_gap
 
-    def check_health(self, enemy):
+    def give_health(self):
+        """Добавляем здоровье игрока."""
+        health_from_bonus = self.calculate_damage()
+        self.player.health += health_from_bonus
+        self.health_bar.update(self.player.health)
+
+    def check_player_bonuses_collision(self):
+        for bonus in self.bonuses:
+            if aabb_collide(self.player.hitbox, bonus.hitbox):
+                self.give_health()
+                return
+
+    def take_health(self, enemy):
+        """Отнимаем здоровье игрока."""
         if self.player.invulnerable:
             return
 
@@ -303,11 +325,8 @@ class GameManager:
 
         for enemy in self.enemies:
             if aabb_collide(self.player.hitbox, enemy.hitbox):
-                self.check_health(enemy)
+                self.take_health(enemy)
                 return
-
-    def give_effects(self):
-        pass
 
     def _update_world_speed(self):
         """Изменение скорости всех объектов по нажатию клавиш вверх и вниз."""
@@ -362,6 +381,8 @@ class GameManager:
                     enemy.move(
                         self.current_world_speed * 0.02
                     )  # нетронутые враги продолжают двигаться
+            for bonus in self.bonuses:
+                bonus.move(self.current_world_speed * 0.2)
             return
 
         self.player.update_invulnerable()
@@ -374,8 +395,8 @@ class GameManager:
         for enemy in self.enemies:
             enemy.move(self.current_world_speed)
         self.player.move()
-        self.hp.move(self.current_world_speed)
-        self.ex.move(self.current_world_speed)
+        for bonus in self.bonuses:
+            bonus.move(self.current_world_speed)
 
         # Смещение игрока
         self.player.rect.y = self.player.base_y - self.player_visual_offset_y
@@ -384,6 +405,7 @@ class GameManager:
         # Проверки коллизий через AABB
         self.check_enemies_collision()
         self.check_player_enemy_collision()
+        self.check_player_bonuses_collision()
 
     def draw_debug(self):
         """Отрисовка хитбоксов в дебаг-режиме."""
@@ -440,8 +462,8 @@ class GameManager:
         for enemy in self.enemies:
             enemy.draw(self.screen)
         self.player.draw(self.screen)
-        self.hp.draw(self.screen)
-        self.ex.draw(self.screen)
+        for bonus in self.bonuses:
+            bonus.draw(self.screen)
 
         self.health_bar.draw(self.screen)
 

@@ -52,6 +52,11 @@ HEALTH_BAR_X = 20
 HEALTH_BAR_Y = 20
 HEALTH_BAR_BORDER = 3
 
+# Типы бонусов
+BONUS_TYPES = ["hp", "ex"]
+MIN_BONUSES_COUNT = 1
+MAX_BONUSES_COUNT = 3
+
 # Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)

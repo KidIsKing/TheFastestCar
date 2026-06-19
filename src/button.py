@@ -1,6 +1,9 @@
 import pygame
 
 
+SCALE = 0.65
+
+
 class ImageButton:
     def __init__(
         self,
@@ -21,10 +24,26 @@ class ImageButton:
 
         self.image = pygame.image.load(image_path)
         self.image = pygame.transform.scale(self.image, (width, height))
+        self.image = pygame.transform.smoothscale(
+            self.image,
+            (
+                int(self.image.get_width() * SCALE),
+                int(self.image.get_height() * SCALE),
+            ),
+        )
+
         self.hover_image = self.image
         if hover_image_path:
             self.hover_image = pygame.image.load(hover_image_path)
             self.hover_image = pygame.transform.scale(self.hover_image, (width, height))
+        self.hover_image = pygame.transform.smoothscale(
+            self.hover_image,
+            (
+                int(self.hover_image.get_width() * SCALE),
+                int(self.hover_image.get_height() * SCALE),
+            ),
+        )
+
         self.rect = self.image.get_rect(topleft=(x, y))
         self.sound = None
         if sound_path:

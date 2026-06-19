@@ -9,7 +9,8 @@ from button import ImageButton
 WIDTH = 1100
 HEIGHT = 800
 
-CENTER_X_FOR_BUTTONS = 370
+CENTER_X_FOR_BUTTONS = 420
+OFFSET_X_FOR_BUTTONS = 17
 START_Y_POS_PLAYER = 600
 
 # Хитбоксы
@@ -246,19 +247,19 @@ class GameManager:
 
         # Game Over
         self.restart_button = ImageButton(
-            CENTER_X_FOR_BUTTONS, 330, 350, 100, "Начать заново",
+            CENTER_X_FOR_BUTTONS + OFFSET_X_FOR_BUTTONS, 330, 350, 100, "Начать заново",
             ASSETS["green_button"],
             ASSETS["green_button_hover"],
             ASSETS["click_sound"],
         )
         self.to_menu_button = ImageButton(
-            CENTER_X_FOR_BUTTONS, 430, 350, 100, "Выйти в меню",
+            CENTER_X_FOR_BUTTONS + OFFSET_X_FOR_BUTTONS, 430, 350, 100, "Выйти в меню",
             ASSETS["green_button"],
             ASSETS["green_button_hover"],
             ASSETS["click_sound"],
         )
         self.continue_button = ImageButton(
-            CENTER_X_FOR_BUTTONS, 330, 350, 100, "Продолжить",
+            CENTER_X_FOR_BUTTONS + OFFSET_X_FOR_BUTTONS, 330, 350, 100, "Продолжить",
             ASSETS["green_button"],
             ASSETS["green_button_hover"],
             ASSETS["click_sound"],

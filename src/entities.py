@@ -1,0 +1,200 @@
+import pygame
+import random
+
+from settings import settings
+from constants import (
+    ASSETS, WIDTH, HEIGHT, ROAD_SPEED,
+    PLAYER_HITBOX_DECREASE, PLAYER_OFFSET_X,
+    START_Y_POS_PLAYER, ROAD_LEFT_BORDER, ROAD_RIGHT_BORDER,
+    ENEMY_HITBOX_DECREASE, ENEMY_OFFSET_X, LANE_POSITIONS
+)
+
+
+class Car:
+    """Базовый класс для всех машин игры."""
+
+    def __init__(self, image_path, scale_x, scale_y, hitbox_decrease, offset_x):
+        base_image = pygame.image.load(image_path)
+        self.image_scaled = pygame.transform.smoothscale(
+            base_image,
+            (
+                int(base_image.get_width() * scale_x),
+                int(base_image.get_height() * scale_y),
+            ),
+        )
+        # Повёрнутая версия (на 180°)
+        self.image_rotated = pygame.transform.rotate(self.image_scaled, 180)
+        self.image = self.image_scaled  # по умолчанию
+
+        self.rect = self.image.get_rect()
+        self.hitbox = self.rect.inflate(*hitbox_decrease)  # уменьшаем хитбокс
+
+        self.offset_x = (
+            offset_x  # смещение по оси OX для правки отображения в дебаг-режиме
+        )
+
+        self.speed = 0
+
+    def draw(self, screen):
+        draw_x = self.rect.x + self.offset_x  # учитываем смещение картинки
+        screen.blit(self.image, (draw_x, self.rect.y))
+
+    def sync_hitbox(self):
+        self.hitbox.center = self.rect.center  # синхронизируем картинку и её хитбокс
+
+
+class Player(Car):
+    """Машина игрока."""
+    def __init__(self):
+        super().__init__(
+            ASSETS["player_car"], 0.35, 0.35, PLAYER_HITBOX_DECREASE, PLAYER_OFFSET_X
+        )
+        self.image = self.image_rotated  # игрок всегда повернутая картинка
+        self.rect = self.image.get_rect()  # пересоздаём rect после поворота
+
+        self.base_x = WIDTH // 2 - self.rect.width // 2
+        self.base_y = START_Y_POS_PLAYER
+        self.rect.topleft = (self.base_x, self.base_y)
+
+        self.speed = 5
+
+        self.max_health = 100
+        self.health = self.max_health
+
+        # Неуязвимость после получения урона
+        self.invulnerable = False
+        self.invulnerable_timer = 0  # таймер, который будет обновляться
+        self.invulnerable_duration = 60  # время неуязвимости
+
+        self.sync_hitbox()
+
+    def update_invulnerable(self):
+        """Обновление таймера неуязвимости."""
+        if self.invulnerable:
+            self.invulnerable_timer -= 1
+            if self.invulnerable_timer <= 0:
+                self.invulnerable = False
+
+    def draw(self, screen):
+        # Если неуязвим - пропускаем некоторые кадры
+        if self.invulnerable and self.invulnerable_timer % 13 < 5:
+            return
+
+        draw_x = self.rect.x + self.offset_x  # учитываем смещение картинки
+        screen.blit(self.image, (draw_x, self.rect.y))
+
+    def move(self):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+            self.rect.x -= self.speed
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+            self.rect.x += self.speed
+
+        # Ограничения движения игрока в пределах дороги
+        self.rect.left = max(self.rect.left, ROAD_LEFT_BORDER)
+        self.rect.right = min(self.rect.right, ROAD_RIGHT_BORDER)
+
+        self.rect.y = self.base_y  # управление через GameManager
+
+        self.sync_hitbox()
+
+
+class Enemy(Car):
+    """Машина врага."""
+    def __init__(self):
+        super().__init__(
+            ASSETS["enemy_car"], 0.45, 0.35, ENEMY_HITBOX_DECREASE, ENEMY_OFFSET_X
+        )
+
+        self.base_speed = 0
+        self.is_oncoming = False  # встречка
+
+        self.spawn()
+
+    def spawn(self):
+        """Генерация случайных параметров для появления нового врага."""
+        self.rect.y = -200
+        self.rect.x = random.choice(LANE_POSITIONS)
+
+        # Переменная, определяющая встречный ли это враг
+        self.is_oncoming = (
+            settings.oncoming_traffic_enabled and self.rect.x in LANE_POSITIONS[:2]
+        )
+
+        # Выбираем ориентацию картинки
+        if self.is_oncoming:
+            self.image = self.image_rotated
+            self.base_speed = random.randint(5, 7)  # встречные быстрее
+        else:
+            self.image = self.image_scaled
+            self.base_speed = random.randint(3, 5)  # попутные медленнее
+
+        # Пересоздаём rect
+        self.rect = self.image.get_rect(topleft=(self.rect.x, self.rect.y))
+
+        self.sync_hitbox()
+
+    def move(self, world_speed):
+        if self.is_oncoming:
+            visual_speed = self.base_speed + world_speed
+        else:
+            visual_speed = world_speed - self.base_speed
+
+        self.rect.y += visual_speed
+
+        # Если враг ушёл за нижнюю границу — создаём нового
+        if self.rect.top > HEIGHT:
+            self.spawn()
+
+        self.sync_hitbox()
+
+
+class Road:
+    def __init__(self):
+        self.image = pygame.image.load(ASSETS["road"])
+        self.rect = self.image.get_rect()
+
+        self.speed = ROAD_SPEED
+
+        self.y1 = 0
+        self.y2 = -self.image.get_height()  # вторая копия начинается сверху
+
+    def draw(self, screen):
+        screen.blit(self.image, (0, self.y1))
+        screen.blit(self.image, (0, self.y2))
+
+    def move(self, world_speed):
+        self.y1 += world_speed
+        self.y2 += world_speed
+
+        # Перемещаем обе копии дороги наверх, когда они снизу вышли за экран
+        if self.y1 >= HEIGHT:
+            self.y1 = self.y2 - self.image.get_height()
+        if self.y2 >= HEIGHT:
+            self.y2 = self.y1 - self.image.get_height()
+
+
+class Bonus:
+    def __init__(self, image_path):
+        self.image = pygame.image.load(image_path)
+        self.image = pygame.transform.smoothscale(
+            self.image,
+            (int(self.image.get_width() * 0.3), int(self.image.get_height() * 0.3))
+        )
+
+        self.rect = self.image.get_rect()
+        self.speed = 0
+
+        self.spawn()
+
+    def spawn(self):
+        self.rect.y = -200
+        self.rect.x = random.randint(50, 850)
+
+    def move(self, world_speed):
+        self.rect.y += world_speed
+        if self.rect.top > HEIGHT:
+            self.spawn()
+
+    def draw(self, screen):
+        screen.blit(self.image, (self.rect.x, self.rect.y))

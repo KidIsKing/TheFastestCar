@@ -74,7 +74,9 @@ ASSETS = {
     "red_button_hover": ASSETS_PATH + "images/buttons/red_button_hover.png",
     "click_sound": ASSETS_PATH + "sounds/click.mp3",
     # Игра
-    "player_car": ASSETS_PATH + "images/player_car.png",
-    "enemy_car": ASSETS_PATH + "images/enemy_car.png",
+    "player_car": ASSETS_PATH + "images/cars/player_car.png",
+    "enemy_car": ASSETS_PATH + "images/cars/enemy_car.png",
     "road": ASSETS_PATH + "images/road.png",
+    "hp": ASSETS_PATH + "images/bonuses/hp.png",
+    "ex": ASSETS_PATH + "images/bonuses/ex.png"
 }

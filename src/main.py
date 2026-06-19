@@ -169,6 +169,10 @@ class HealthBar:
 
 
 class GameManager:
+    """Менеджер игры."""
+
+    best_score = 0
+
     def __init__(self, screen):
         self.screen = screen
 
@@ -181,6 +185,8 @@ class GameManager:
         for _ in range(random.randint(MIN_BONUSES_COUNT, MAX_BONUSES_COUNT)):
             bonus_type = random.choice(bonus_types)
             self.bonuses.append(Bonus(ASSETS[bonus_type], bonus_type))
+
+        self.score = 0
 
         self.current_world_speed = settings.base_world_speed
         self.player_visual_offset_y = 0
@@ -247,11 +253,26 @@ class GameManager:
         for _ in range(random.randint(MIN_BONUSES_COUNT, MAX_BONUSES_COUNT)):
             bonus_type = random.choice(bonus_types)
             self.bonuses.append(Bonus(ASSETS[bonus_type], bonus_type))
+        self.score = 0
+        GameManager.best_score = max(GameManager.best_score, self.score)
         self.health_bar.update(PLAYER_MAX_HEALTH)
         self.collided_enemy = None
         self.current_world_speed = settings.base_world_speed
         self.player_visual_offset_y = 0
         self.game_over = False
+
+    def check_experience(self):
+        if self.score > GameManager.best_score:
+            GameManager.best_score = self.score
+
+    def draw_score(self):
+        font = pygame.font.SysFont(None, 30)
+        text = font.render(
+            f"Счёт: {self.score}. Рекорд: {GameManager.best_score}",
+            True, WHITE
+        )
+        text_rect = text.get_rect(topright=(200, HEIGHT - 20))
+        self.screen.blit(text, text_rect)
 
     def calculate_damage(self):
         """Расчёт урона с гауссовым распределением."""
@@ -288,16 +309,36 @@ class GameManager:
         if top_enemy.rect.bottom > bottom_enemy.rect.top - min_gap:
             top_enemy.rect.bottom = bottom_enemy.rect.top - min_gap
 
+    def apply_bonus(self, bonus):
+        """Применение эффекта бонуса в зависимости от типа."""
+        if bonus.effects_type == "hp":
+            self.give_health()
+        elif bonus.effects_type == "ex":
+            self.give_experience()
+
     def give_health(self):
         """Добавляем здоровье игрока."""
         health_from_bonus = self.calculate_damage()
         self.player.health += health_from_bonus
+        self.player.health = min(
+            self.player.max_health,
+            self.player.health + health_from_bonus
+        )
         self.health_bar.update(self.player.health)
 
+    def give_experience(self):
+        """Добавляем опыт игроку (заглушка)."""
+        experience = self.calculate_damage()
+        self.score += experience
+
     def check_player_bonuses_collision(self):
+        if self.game_over:
+            return
+
         for bonus in self.bonuses:
             if aabb_collide(self.player.hitbox, bonus.hitbox):
-                self.give_health()
+                self.apply_bonus(bonus)
+                bonus.spawn()
                 return
 
     def take_health(self, enemy):
@@ -402,6 +443,8 @@ class GameManager:
         self.player.rect.y = self.player.base_y - self.player_visual_offset_y
         self.player.sync_hitbox()
 
+        self.check_experience()
+
         # Проверки коллизий через AABB
         self.check_enemies_collision()
         self.check_player_enemy_collision()
@@ -417,45 +460,6 @@ class GameManager:
         for enemy in self.enemies:
             pygame.draw.rect(self.screen, RED, enemy.hitbox, 2)
 
-    def draw_healh_bar(self):
-        """Отрисовка полоски здоровья."""
-        bar_x = 10
-        bar_y = 10
-        bar_width = 149
-        bar_height = 45
-        border_thickness = 3
-
-        # Фон полоски
-        pygame.draw.rect(
-            self.screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height)
-        )
-
-        # Динамическое заполнение
-        health_ratio = self.player.health / self.player.max_health
-        fill_width = bar_width * health_ratio
-
-        if health_ratio > 0.5:
-            color = GREEN
-        elif health_ratio > 0.25:
-            color = YELLOW
-        else:
-            color = RED
-
-        pygame.draw.rect(self.screen, color, (bar_x, bar_y, fill_width, bar_height))
-        # Рамка
-        pygame.draw.rect(
-            self.screen, WHITE, (bar_x, bar_y, bar_width, bar_height), border_thickness
-        )
-
-        font = pygame.font.SysFont(None, 30)
-        text = font.render(
-            f"{self.player.health}/{self.player.max_health}", True, WHITE
-        )
-        text_rect = text.get_rect(
-            center=(bar_x + bar_width // 2, bar_y + bar_height // 2)
-        )
-        self.screen.blit(text, text_rect)
-
     def draw(self):
         """Отрисовка игрового экрана."""
         self.road.draw(self.screen)
@@ -466,6 +470,7 @@ class GameManager:
             bonus.draw(self.screen)
 
         self.health_bar.draw(self.screen)
+        self.draw_score()
 
         self.draw_debug()
 

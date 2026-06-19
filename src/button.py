@@ -1,10 +1,15 @@
 import pygame
 
-
-SCALE = 0.65
+from constants import WHITE, ASSETS, WIDTH
 
 
 class ImageButton:
+    """Интерактивная кнопка."""
+
+    SCALE = 0.65
+    FONT_SIZE = 36
+    TEXT_COLOR = WHITE
+
     def __init__(
         self,
         x,
@@ -22,27 +27,12 @@ class ImageButton:
         self.height = height
         self.text = text
 
-        self.image = pygame.image.load(image_path)
-        self.image = pygame.transform.scale(self.image, (width, height))
-        self.image = pygame.transform.smoothscale(
-            self.image,
-            (
-                int(self.image.get_width() * SCALE),
-                int(self.image.get_height() * SCALE),
-            ),
-        )
+        self.image = self._load_and_scale_image(image_path)
 
-        self.hover_image = self.image
         if hover_image_path:
-            self.hover_image = pygame.image.load(hover_image_path)
-            self.hover_image = pygame.transform.scale(self.hover_image, (width, height))
-        self.hover_image = pygame.transform.smoothscale(
-            self.hover_image,
-            (
-                int(self.hover_image.get_width() * SCALE),
-                int(self.hover_image.get_height() * SCALE),
-            ),
-        )
+            self.hover_image = self._load_and_scale_image(hover_image_path)
+        else:
+            self.hover_image = self.image  # если нет ассета для нажатой кнопки
 
         self.rect = self.image.get_rect(topleft=(x, y))
         self.sound = None
@@ -50,12 +40,24 @@ class ImageButton:
             self.sound = pygame.mixer.Sound(sound_path)
         self.is_hovered = False
 
+        self.font = pygame.font.Font(None, self.FONT_SIZE)
+
+    def _load_and_scale_image(self, image_path):
+        image = pygame.image.load(image_path)
+        image = pygame.transform.smoothscale(
+            image,
+            (
+                int(image.get_width() * self.SCALE),
+                int(image.get_height() * self.SCALE),
+            ),
+        )
+        return image
+
     def draw(self, screen):
         current_image = self.hover_image if self.is_hovered else self.image
         screen.blit(current_image, self.rect.topleft)
 
-        font = pygame.font.Font(None, 36)
-        text_surface = font.render(self.text, True, (255, 255, 255))
+        text_surface = self.font.render(self.text, True, self.TEXT_COLOR)
         text_rect = text_surface.get_rect(center=self.rect.center)
         screen.blit(text_surface, text_rect)
 
@@ -71,3 +73,16 @@ class ImageButton:
             if self.sound:
                 self.sound.play()
             pygame.event.post(pygame.event.Event(pygame.USEREVENT, button=self))
+
+
+def create_buttons(text, y_pos, color="green", width=450, height=100):
+    return ImageButton(
+        WIDTH // 2 - width // 2,
+        y_pos,
+        width,
+        height,
+        text,
+        ASSETS[f"{color}_button"],
+        ASSETS[f"{color}_button_hover"],
+        ASSETS["click_sound"],
+    )

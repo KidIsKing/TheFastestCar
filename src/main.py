@@ -2,70 +2,8 @@ import pygame
 import random
 import sys
 
-from button import ImageButton
-
-
-# Constans
-WIDTH = 1100
-HEIGHT = 800
-
-CENTER_X_FOR_BUTTONS = 420
-OFFSET_X_FOR_BUTTONS = 17
-START_Y_POS_PLAYER = 600
-
-# Хитбоксы
-PLAYER_HITBOX_DECREASE = (-110, 0)
-ENEMY_HITBOX_DECREASE = (-180, 0)
-
-# Ограничения дороги
-ROAD_LEFT_BORDER = 120
-ROAD_RIGHT_BORDER = WIDTH - 120
-
-LANE_POSITIONS = [130, 320, 510, 700]  # X-координаты полос для спавна врагов
-
-# Визуальные смещения
-PLAYER_OFFSET_X = -1
-ENEMY_OFFSET_X = -3
-
-ENEMY_MIN_GAP = 5
-
-ROAD_SPEED = 8
-
-# Параметры скорости
-BASE_WORLD_SPEED = 8
-MAX_WORLD_SPEED = 18
-MIN_WORLD_SPEED = 3
-ACCELERATION_SMOOTHING = 0.03
-DECELERATION_SMOOTHING = 0.05
-MAX_PLAYER_OFFSET_Y = 100
-
-FPS = 60
-
-# Colors
-WHITE = (255, 255, 255)
-BLACK = (0, 0, 0)
-GREEN = (0, 255, 0)
-RED = (255, 0, 0)
-
-# Fade
-FADE_SPEED = 10
-MAX_FADE_ALPHA = 150
-
-# Assets
-ASSETS_PATH = "assets/"
-ASSETS = {
-    # Меню
-    "main_background": ASSETS_PATH + "images/background_menu.png",
-    "green_button": ASSETS_PATH + "images/buttons/green_button.png",
-    "green_button_hover": ASSETS_PATH + "images/buttons/green_button_hover.png",
-    "red_button": ASSETS_PATH + "images/buttons/red_button.png",
-    "red_button_hover": ASSETS_PATH + "images/buttons/red_button_hover.png",
-    "click_sound": ASSETS_PATH + "sounds/click.mp3",
-    # Игра
-    "player_car": ASSETS_PATH + "images/player_car.png",
-    "enemy_car": ASSETS_PATH + "images/enemy_car.png",
-    "road": ASSETS_PATH + "images/road.png",
-}
+from constants import *
+from button import ImageButton, create_buttons
 
 
 # Алгоритм 1. Проверка столкновения двух AABB-прямоугольников (Axis-Aligned Bounding Box).
@@ -170,8 +108,7 @@ class Enemy(Car):
 
         # Переменная, определяющая встречный ли это враг
         self.is_oncoming = (
-            settings.oncoming_traffic_enabled 
-            and self.rect.x in LANE_POSITIONS[:2]
+            settings.oncoming_traffic_enabled and self.rect.x in LANE_POSITIONS[:2]
         )
 
         # Выбираем ориентацию картинки
@@ -245,31 +182,16 @@ class GameManager:
         self.game_pause = False  # Флаг паузы
         self.debug_mode = False
 
-        # Game Over
-        self.restart_button = ImageButton(
-            CENTER_X_FOR_BUTTONS + OFFSET_X_FOR_BUTTONS, 330, 350, 100, "Начать заново",
-            ASSETS["green_button"],
-            ASSETS["green_button_hover"],
-            ASSETS["click_sound"],
+        # Создаём оверлеи
+        self.game_over_overlay = Overlay(
+            "Игра окончена",
+            [("Начать заново", "restart"), ("Выйти в меню", "to_menu")]
         )
-        self.to_menu_button = ImageButton(
-            CENTER_X_FOR_BUTTONS + OFFSET_X_FOR_BUTTONS, 430, 350, 100, "Выйти в меню",
-            ASSETS["green_button"],
-            ASSETS["green_button_hover"],
-            ASSETS["click_sound"],
+        self.pause_overlay = Overlay(
+            "Пауза",
+            [("Продолжить", "continue"), ("Выйти в меню", "to_menu")]
         )
-        self.continue_button = ImageButton(
-            CENTER_X_FOR_BUTTONS + OFFSET_X_FOR_BUTTONS, 330, 350, 100, "Продолжить",
-            ASSETS["green_button"],
-            ASSETS["green_button_hover"],
-            ASSETS["click_sound"],
-        )
-        self.game_over_buttons = [self.restart_button, self.to_menu_button]
-        self.game_pause_buttons = [self.continue_button, self.to_menu_button]
-
-        self.game_over_font = pygame.font.SysFont(None, 96)
-        self.game_over_panel_rect = pygame.Rect(WIDTH // 2 - 250, HEIGHT // 2 - 200, 500, 400)
-
+        
     def handle_events(self, event):
         """Обработка нажатий клавиш."""
         # Обработка экранчика проигрыша
@@ -277,15 +199,12 @@ class GameManager:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.running = False
                 return
-
-            for button in self.game_over_buttons:
-                button.handle_event(event)
-
-            if event.type == pygame.USEREVENT:
-                if event.button == self.restart_button:
-                    self.restart_game()
-                if event.button == self.to_menu_button:
-                    self.running = False
+            
+            action = self.game_over_overlay.handle_event(event)
+            if action == "restart":
+                self.restart_game()
+            elif action == "to_menu":
+                self.running = False
             return
 
         # Обработка экранчика паузы
@@ -294,14 +213,11 @@ class GameManager:
                 self.game_pause = False
                 return
 
-            for button in self.game_pause_buttons:
-                button.handle_event(event)
-
-            if event.type == pygame.USEREVENT:
-                if event.button == self.continue_button:
-                    self.game_pause = False
-                if event.button == self.to_menu_button:
-                    self.running = False
+            action = self.pause_overlay.handle_event(event)
+            if action == "continue":
+                self.game_pause = False
+            elif action == "to_menu":
+                self.running = False
             return
 
         # Запуск окошка паузы при нажатии ESC
@@ -379,12 +295,14 @@ class GameManager:
             smoothing = settings.deceleration_smoothing
 
         # Плавное изменение скорости
-        self.current_world_speed += (target_speed - self.current_world_speed) * smoothing
+        self.current_world_speed += (
+            target_speed - self.current_world_speed
+        ) * smoothing
 
         # Ограничения
         self.current_world_speed = max(
             settings.min_world_speed,
-            min(settings.max_world_speed, self.current_world_speed)
+            min(settings.max_world_speed, self.current_world_speed),
         )
 
     def _update_player_visual_offset(self):
@@ -394,20 +312,26 @@ class GameManager:
         if speed_range == 0:
             speed_ratio = 0
         else:
-            speed_ratio = (self.current_world_speed - settings.base_world_speed) / speed_range
+            speed_ratio = (
+                self.current_world_speed - settings.base_world_speed
+            ) / speed_range
 
-        offset_ratio = speed_ratio ** 2
+        offset_ratio = speed_ratio**2
 
         target_offset = settings.max_player_offset_y * offset_ratio
 
-        self.player_visual_offset_y += (target_offset - self.player_visual_offset_y) * 0.1
+        self.player_visual_offset_y += (
+            target_offset - self.player_visual_offset_y
+        ) * 0.1
 
     def update(self):
         """Обновление состояния игры."""
         if self.game_over:
             for enemy in self.enemies:
                 if enemy is not self.collided_enemy:
-                    enemy.move(self.current_world_speed * 0.02)  # нетронутые враги продолжают двигаться
+                    enemy.move(
+                        self.current_world_speed * 0.02
+                    )  # нетронутые враги продолжают двигаться
             return
 
         # Обновляем скорость и смещение
@@ -437,26 +361,6 @@ class GameManager:
         for enemy in self.enemies:
             pygame.draw.rect(self.screen, RED, enemy.hitbox, 2)
 
-    def draw_overlay_screen(self, text, buttons_list):
-        """Отрисовка окошка окончания игры."""
-        # Полупрозрачный тёмный фон поверх всей игры
-        overlay = pygame.Surface((WIDTH, HEIGHT))
-        overlay.fill(BLACK)
-        overlay.set_alpha(150)
-        self.screen.blit(overlay, (0, 0))
-
-        pygame.draw.rect(self.screen, WHITE, self.game_over_panel_rect)
-        pygame.draw.rect(self.screen, BLACK, self.game_over_panel_rect, 3)  # рамка
-
-        text_surface = self.game_over_font.render(text, True, BLACK)
-        text_x = self.game_over_panel_rect.centerx - text_surface.get_width() // 2
-        text_y = self.game_over_panel_rect.top + 40
-        self.screen.blit(text_surface, (text_x, text_y))
-
-        for button in buttons_list:
-            button.check_hover(pygame.mouse.get_pos())
-            button.draw(self.screen)
-
     def draw(self):
         """Отрисовка игрового экрана."""
         self.road.draw(self.screen)
@@ -467,13 +371,15 @@ class GameManager:
         self.draw_debug()
 
         if self.game_over:
-            self.draw_overlay_screen("Game Over", self.game_over_buttons)
+            self.game_over_overlay.draw(self.screen)
         elif self.game_pause:
-            self.draw_overlay_screen("Pause", self.game_pause_buttons)
+            self.pause_overlay.draw(self.screen)
 
     def run(self):
         """Главный процесс игры."""
-        if self.game_pause or not self.running:  # если игра заморожена, то не обновляем её
+        if (
+            self.game_pause or not self.running
+        ):  # если игра заморожена, то не обновляем её
             self.draw()
             return
 
@@ -506,26 +412,13 @@ class MenuManager:
         self.second_font = pygame.font.SysFont(None, 40)
 
         # Создание кнопок
-        self.start_button = self._create_button("Играть", 300, "green")
-        self.settings_button = self._create_button("Настройки", 400, "green")
-        self.exit_button = self._create_button("Выйти", 500, "red")
-        self.oncoming_traffic_button = self._create_button("Встречка", 300, "green")
-        self.back_button = self._create_button("Назад", 400, "green")
+        self.start_button = create_buttons("Играть", 300, "green")
+        self.settings_button = create_buttons("Настройки", 400, "green")
+        self.exit_button = create_buttons("Выйти", 500, "red")
+        self.oncoming_traffic_button = create_buttons("Встречка", 300, "green")
+        self.back_button = create_buttons("Назад", 400, "green")
 
         self.buttons_list = []
-
-    def _create_button(self, text, y_pos, color):
-        """Инкапсулированный метод для создания кнопок."""
-        return ImageButton(
-            CENTER_X_FOR_BUTTONS,
-            y_pos,
-            350,
-            100,
-            text,
-            ASSETS[f"{color}_button"],
-            ASSETS[f"{color}_button_hover"],
-            ASSETS["click_sound"],
-        )
 
     def start_transition(self, target):
         """Старт анимации затухания и установка целевого окна."""
@@ -539,8 +432,12 @@ class MenuManager:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
-            
-            if self.window == "settings" and event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+
+            if (
+                self.window == "settings"
+                and event.type == pygame.KEYDOWN
+                and event.key == pygame.K_ESCAPE
+            ):
                 self.start_transition("menu")
 
             if self.window == "game" and self.game_manager is not None:
@@ -675,6 +572,72 @@ class MenuManager:
         pygame.quit()
         sys.exit()
 
+
+class Overlay:
+    """Окно поверх игры."""
+    PANEL_WIDTH = 500
+    PANEL_HEIGHT = 400
+    OVERLAY_ALPHA = 150
+    BUTTON_SPACING = 100  # расстояние между кнопками по Y
+    FIRST_BUTTON_Y = 330
+
+    def __init__(self, title, button_configs):
+        """
+        title — текст заголовка (например, "Game Over")
+        button_configs — список кортежей (text, action_name)
+        """
+        self.title = title
+        self.buttons = []
+        self.button_actions = {}  # {кнопка: имя действия}
+
+        self.panel_rect = pygame.Rect(
+            WIDTH // 2 - self.PANEL_WIDTH // 2,
+            HEIGHT // 2 - self.PANEL_HEIGHT // 2,
+            self.PANEL_WIDTH,
+            self.PANEL_HEIGHT,
+        )
+
+        self.title_font = pygame.font.SysFont(None, 96)
+
+        self._create_buttons(button_configs)
+
+    def _create_buttons(self, button_configs):
+        for i, (text, action_name) in enumerate(button_configs):
+            y_pos = self.FIRST_BUTTON_Y  + i * self.BUTTON_SPACING
+            button = create_buttons(text, y_pos, "green")
+            self.buttons.append(button)
+            self.button_actions[button] = action_name
+    
+    def draw(self, screen):
+        # Полупрозрачный тёмный фон поверх всей игры
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.fill(BLACK)
+        overlay.set_alpha(150)
+        screen.blit(overlay, (0, 0))
+
+        pygame.draw.rect(screen, WHITE, self.panel_rect)
+        pygame.draw.rect(screen, BLACK, self.panel_rect, 3)  # рамка
+
+        text_surface = self.title_font.render(self.title, True, BLACK)
+        text_x = self.panel_rect.centerx - text_surface.get_width() // 2
+        text_y = self.panel_rect.top + 40
+        screen.blit(text_surface, (text_x, text_y))
+
+        for button in self.buttons:
+            button.check_hover(pygame.mouse.get_pos())
+            button.draw(screen)
+
+    def handle_event(self, event):
+        for button in self.buttons:
+            button.handle_event(event)
+        
+        if event.type == pygame.USEREVENT:
+            for button in self.buttons:
+                if event.button == button:
+                    return self.button_actions[button]
+        
+        return None
+                    
 
 class Settings:
     """Настройки и переменные, влияющие на игру."""

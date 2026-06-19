@@ -2,7 +2,9 @@
 WIDTH = 1100
 HEIGHT = 800
 
-CENTER_X_FOR_BUTTONS = 440
+BUTTON_WIDTH = 197
+BUTTON_HEIGHT = 100
+
 START_Y_POS_PLAYER = 600
 
 # Хитбоксы
@@ -33,11 +35,29 @@ MAX_PLAYER_OFFSET_Y = 100
 
 FPS = 60
 
+# Здоровье игрока
+PLAYER_MAX_HEALTH = 100
+PLAYER_INVULNERABLE_DURATION = 60  # длительность неуязвимости
+
+# Урон (гауссово распределение)
+BASE_DAMAGE = 10
+DAMAGE_SPREAD = 10  # стандартное отклонение (разброс)
+DAMAGE_MIN = 5
+DAMAGE_MAX = 15
+
+# Полоска здоровья
+HEALTH_BAR_WIDTH = 200
+HEALTH_BAR_HEIGHT = 25
+HEALTH_BAR_X = 20
+HEALTH_BAR_Y = 20
+HEALTH_BAR_BORDER = 3
+
 # Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
+YELLOW = (255, 255, 0)
 
 # Fade
 FADE_SPEED = 10

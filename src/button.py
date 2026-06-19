@@ -1,6 +1,6 @@
 import pygame
 
-from constants import WHITE, ASSETS, WIDTH
+from constants import WHITE, ASSETS, WIDTH, BUTTON_WIDTH, BUTTON_HEIGHT
 
 
 class ImageButton:
@@ -75,7 +75,7 @@ class ImageButton:
             pygame.event.post(pygame.event.Event(pygame.USEREVENT, button=self))
 
 
-def create_buttons(text, y_pos, color="green", width=450, height=100):
+def create_buttons(text, y_pos, color="green", width=BUTTON_WIDTH, height=BUTTON_HEIGHT):
     return ImageButton(
         WIDTH // 2 - width // 2,
         y_pos,

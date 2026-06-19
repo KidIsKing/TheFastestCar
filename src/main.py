@@ -2,8 +2,43 @@ import pygame
 import random
 import sys
 
-from constants import *
 from button import ImageButton, create_buttons
+from constants import (
+    WIDTH,
+    HEIGHT,
+    START_Y_POS_PLAYER,
+    PLAYER_HITBOX_DECREASE,
+    ENEMY_HITBOX_DECREASE,
+    ROAD_LEFT_BORDER,
+    ROAD_RIGHT_BORDER,
+    LANE_POSITIONS,
+    ROAD_SPEED,
+    PLAYER_OFFSET_X,
+    ENEMY_OFFSET_X,
+    ENEMY_MIN_GAP,
+    BASE_WORLD_SPEED,
+    MAX_WORLD_SPEED,
+    MIN_WORLD_SPEED,
+    ACCELERATION_SMOOTHING,
+    DECELERATION_SMOOTHING,
+    MAX_PLAYER_OFFSET_Y,
+    FPS,
+    PLAYER_MAX_HEALTH, PLAYER_INVULNERABLE_DURATION, BASE_DAMAGE,
+    DAMAGE_SPREAD, DAMAGE_MIN, DAMAGE_MAX,
+    HEALTH_BAR_WIDTH,
+    HEALTH_BAR_HEIGHT,
+    HEALTH_BAR_X,
+    HEALTH_BAR_Y,
+    HEALTH_BAR_BORDER,
+    WHITE,
+    BLACK,
+    GREEN,
+    RED,
+    YELLOW,
+    FADE_SPEED,
+    MAX_FADE_ALPHA,
+    ASSETS,
+)
 
 
 # Алгоритм 1. Проверка столкновения двух AABB-прямоугольников (Axis-Aligned Bounding Box).
@@ -72,7 +107,30 @@ class Player(Car):
 
         self.speed = 5
 
+        self.max_health = 100
+        self.health = self.max_health
+
+        # Неуязвимость после получения урона
+        self.invulnerable = False
+        self.invulnerable_timer = 0  # таймер, который будет обновляться
+        self.invulnerable_duration = 60  # время неуязвимости
+
         self.sync_hitbox()
+
+    def update_invulnerable(self):
+        """Обновление таймера неуязвимости."""
+        if self.invulnerable:
+            self.invulnerable_timer -= 1
+            if self.invulnerable_timer <= 0:
+                self.invulnerable = False
+
+    def draw(self, screen):
+        # Если неуязвим - пропускаем некоторые кадры
+        if self.invulnerable and self.invulnerable_timer % 13 < 5:
+            return
+
+        draw_x = self.rect.x + self.offset_x  # учитываем смещение картинки
+        screen.blit(self.image, (draw_x, self.rect.y))
 
     def move(self):
         keys = pygame.key.get_pressed()
@@ -164,6 +222,125 @@ class Road:
             self.y2 = self.y1 - self.image.get_height()
 
 
+class Overlay:
+    """Окно поверх игры."""
+
+    PANEL_WIDTH = 500
+    PANEL_HEIGHT = 400
+    OVERLAY_ALPHA = 150
+    BUTTON_SPACING = 100  # расстояние между кнопками по Y
+    FIRST_BUTTON_Y = 330
+
+    def __init__(self, title, button_configs):
+        """
+        title — текст заголовка (например, "Game Over")
+        button_configs — список кортежей (text, action_name)
+        """
+        self.title = title
+        self.buttons = []
+        self.button_actions = {}  # {кнопка: имя действия}
+
+        self.panel_rect = pygame.Rect(
+            WIDTH // 2 - self.PANEL_WIDTH // 2,
+            HEIGHT // 2 - self.PANEL_HEIGHT // 2,
+            self.PANEL_WIDTH,
+            self.PANEL_HEIGHT,
+        )
+
+        self.title_font = pygame.font.SysFont(None, 96)
+
+        self._create_button(button_configs)
+
+    def _create_button(self, button_configs):
+        for i, (text, action_name) in enumerate(button_configs):
+            y_pos = self.FIRST_BUTTON_Y + i * self.BUTTON_SPACING
+            button = create_buttons(text, y_pos, "green")
+            self.buttons.append(button)
+            self.button_actions[button] = action_name
+
+    def draw(self, screen):
+        # Полупрозрачный тёмный фон поверх всей игры
+        overlay = pygame.Surface((WIDTH, HEIGHT))
+        overlay.fill(BLACK)
+        overlay.set_alpha(self.OVERLAY_ALPHA)
+        screen.blit(overlay, (0, 0))
+
+        pygame.draw.rect(screen, WHITE, self.panel_rect)
+        pygame.draw.rect(screen, BLACK, self.panel_rect, 3)  # рамка
+
+        text_surface = self.title_font.render(self.title, True, BLACK)
+        text_x = self.panel_rect.centerx - text_surface.get_width() // 2
+        text_y = self.panel_rect.top + 40
+        screen.blit(text_surface, (text_x, text_y))
+
+        for button in self.buttons:
+            button.check_hover(pygame.mouse.get_pos())
+            button.draw(screen)
+
+    def handle_event(self, event):
+        for button in self.buttons:
+            button.handle_event(event)
+
+        if event.type == pygame.USEREVENT:
+            for button in self.buttons:
+                if event.button == button:
+                    return self.button_actions[button]
+
+        return None
+
+
+class HealthBar:
+    """Полоска здоровья."""
+
+    def __init__(self, max_health):
+        self.max_health = max_health
+        self.current_health = max_health
+
+        self.font = pygame.font.SysFont(None, 30)
+
+    def update(self, health):
+        self.current_health = max(0, health)  # не ниже 0
+
+    def draw(self, screen):
+        # Фон полоски
+        pygame.draw.rect(
+            screen,
+            (50, 50, 50),
+            (HEALTH_BAR_X, HEALTH_BAR_Y, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT),
+        )
+
+        # Динамическое заполнение
+        health_ratio = self.current_health / self.max_health
+        fill_width = int(HEALTH_BAR_WIDTH * health_ratio)
+
+        if health_ratio > 0.5:
+            color = GREEN
+        elif health_ratio > 0.25:
+            color = YELLOW
+        else:
+            color = RED
+
+        pygame.draw.rect(
+            screen, color, (HEALTH_BAR_X, HEALTH_BAR_Y, fill_width, HEALTH_BAR_HEIGHT)
+        )
+        # Рамка
+        pygame.draw.rect(
+            screen,
+            WHITE,
+            (HEALTH_BAR_X, HEALTH_BAR_Y, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT),
+            HEALTH_BAR_BORDER,
+        )
+
+        text = self.font.render(f"{self.current_health}/{self.max_health}", True, WHITE)
+        text_rect = text.get_rect(
+            center=(
+                HEALTH_BAR_X + HEALTH_BAR_WIDTH // 2,
+                HEALTH_BAR_Y + HEALTH_BAR_HEIGHT // 2,
+            )
+        )
+        screen.blit(text, text_rect)
+
+
 class GameManager:
     def __init__(self, screen):
         self.screen = screen
@@ -171,6 +348,7 @@ class GameManager:
         self.road = Road()
         self.player = Player()
         self.enemies = [Enemy() for _ in range(3)]
+        self.health_bar = HealthBar(PLAYER_MAX_HEALTH)
 
         self.current_world_speed = settings.base_world_speed
         self.player_visual_offset_y = 0
@@ -184,14 +362,12 @@ class GameManager:
 
         # Создаём оверлеи
         self.game_over_overlay = Overlay(
-            "Игра окончена",
-            [("Начать заново", "restart"), ("Выйти в меню", "to_menu")]
+            "Игра окончена", [("Начать заново", "restart"), ("Выйти в меню", "to_menu")]
         )
         self.pause_overlay = Overlay(
-            "Пауза",
-            [("Продолжить", "continue"), ("Выйти в меню", "to_menu")]
+            "Пауза", [("Продолжить", "continue"), ("Выйти в меню", "to_menu")]
         )
-        
+
     def handle_events(self, event):
         """Обработка нажатий клавиш."""
         # Обработка экранчика проигрыша
@@ -199,7 +375,7 @@ class GameManager:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.running = False
                 return
-            
+
             action = self.game_over_overlay.handle_event(event)
             if action == "restart":
                 self.restart_game()
@@ -234,10 +410,17 @@ class GameManager:
         self.player = Player()
         self.enemies = [Enemy() for _ in range(3)]
         self.road = Road()
+        self.health_bar.update(PLAYER_MAX_HEALTH)
         self.collided_enemy = None
         self.current_world_speed = settings.base_world_speed
         self.player_visual_offset_y = 0
         self.game_over = False
+
+    def calculate_damage(self):
+        """Расчёт урона с гауссовым распределением."""
+        damage = random.gauss(BASE_DAMAGE, DAMAGE_SPREAD)
+        damage = max(DAMAGE_MIN, max(DAMAGE_MAX, int(damage)))
+        return damage
 
     def check_enemies_collision(self):
         """Проверка столкновений врагов друг с другом через AABB."""
@@ -268,6 +451,24 @@ class GameManager:
         if top_enemy.rect.bottom > bottom_enemy.rect.top - min_gap:
             top_enemy.rect.bottom = bottom_enemy.rect.top - min_gap
 
+    def check_health(self, enemy):
+        if self.player.invulnerable:
+            return
+
+        damage = self.calculate_damage()
+
+        self.player.health -= damage
+        print(self.player.health)
+
+        self.health_bar.update(self.player.health)
+
+        self.player.invulnerable = True
+        self.player.invulnerable_timer = PLAYER_INVULNERABLE_DURATION
+
+        if self.player.health <= 0:
+            self.game_over = True
+            self.collided_enemy = enemy
+
     def check_player_enemy_collision(self):
         """Проверка столкновений игрока с врагами через AABB."""
         if self.game_over:
@@ -275,8 +476,7 @@ class GameManager:
 
         for enemy in self.enemies:
             if aabb_collide(self.player.hitbox, enemy.hitbox):
-                self.game_over = True
-                self.collided_enemy = enemy
+                self.check_health(enemy)
                 return
 
     def _update_world_speed(self):
@@ -334,6 +534,8 @@ class GameManager:
                     )  # нетронутые враги продолжают двигаться
             return
 
+        self.player.update_invulnerable()
+
         # Обновляем скорость и смещение
         self._update_world_speed()
         self._update_player_visual_offset()
@@ -361,12 +563,53 @@ class GameManager:
         for enemy in self.enemies:
             pygame.draw.rect(self.screen, RED, enemy.hitbox, 2)
 
+    def draw_healh_bar(self):
+        """Отрисовка полоски здоровья."""
+        bar_x = 10
+        bar_y = 10
+        bar_width = 149
+        bar_height = 45
+        border_thickness = 3
+
+        # Фон полоски
+        pygame.draw.rect(
+            self.screen, (50, 50, 50), (bar_x, bar_y, bar_width, bar_height)
+        )
+
+        # Динамическое заполнение
+        health_ratio = self.player.health / self.player.max_health
+        fill_width = bar_width * health_ratio
+
+        if health_ratio > 0.5:
+            color = GREEN
+        elif health_ratio > 0.25:
+            color = YELLOW
+        else:
+            color = RED
+
+        pygame.draw.rect(self.screen, color, (bar_x, bar_y, fill_width, bar_height))
+        # Рамка
+        pygame.draw.rect(
+            self.screen, WHITE, (bar_x, bar_y, bar_width, bar_height), border_thickness
+        )
+
+        font = pygame.font.SysFont(None, 30)
+        text = font.render(
+            f"{self.player.health}/{self.player.max_health}", True, WHITE
+        )
+        text_rect = text.get_rect(
+            center=(bar_x + bar_width // 2, bar_y + bar_height // 2)
+        )
+        self.screen.blit(text, text_rect)
+
     def draw(self):
         """Отрисовка игрового экрана."""
         self.road.draw(self.screen)
         for enemy in self.enemies:
             enemy.draw(self.screen)
         self.player.draw(self.screen)
+
+        self.health_bar.draw(self.screen)
 
         self.draw_debug()
 
@@ -498,7 +741,7 @@ class MenuManager:
 
         # Показываем текущее состояние встречки
         traffic_status = "ВКЛ" if settings.oncoming_traffic_enabled else "ВЫКЛ"
-        self.draw_text(f"Встречка: {traffic_status}", self.second_font, WHITE, 440, 290)
+        self.draw_text(f"Встречка: {traffic_status}", self.second_font, WHITE, 440, 230)
 
         # Обработка и отрисовка кнопок
         self.draw_buttons()
@@ -572,72 +815,6 @@ class MenuManager:
         pygame.quit()
         sys.exit()
 
-
-class Overlay:
-    """Окно поверх игры."""
-    PANEL_WIDTH = 500
-    PANEL_HEIGHT = 400
-    OVERLAY_ALPHA = 150
-    BUTTON_SPACING = 100  # расстояние между кнопками по Y
-    FIRST_BUTTON_Y = 330
-
-    def __init__(self, title, button_configs):
-        """
-        title — текст заголовка (например, "Game Over")
-        button_configs — список кортежей (text, action_name)
-        """
-        self.title = title
-        self.buttons = []
-        self.button_actions = {}  # {кнопка: имя действия}
-
-        self.panel_rect = pygame.Rect(
-            WIDTH // 2 - self.PANEL_WIDTH // 2,
-            HEIGHT // 2 - self.PANEL_HEIGHT // 2,
-            self.PANEL_WIDTH,
-            self.PANEL_HEIGHT,
-        )
-
-        self.title_font = pygame.font.SysFont(None, 96)
-
-        self._create_buttons(button_configs)
-
-    def _create_buttons(self, button_configs):
-        for i, (text, action_name) in enumerate(button_configs):
-            y_pos = self.FIRST_BUTTON_Y  + i * self.BUTTON_SPACING
-            button = create_buttons(text, y_pos, "green")
-            self.buttons.append(button)
-            self.button_actions[button] = action_name
-    
-    def draw(self, screen):
-        # Полупрозрачный тёмный фон поверх всей игры
-        overlay = pygame.Surface((WIDTH, HEIGHT))
-        overlay.fill(BLACK)
-        overlay.set_alpha(150)
-        screen.blit(overlay, (0, 0))
-
-        pygame.draw.rect(screen, WHITE, self.panel_rect)
-        pygame.draw.rect(screen, BLACK, self.panel_rect, 3)  # рамка
-
-        text_surface = self.title_font.render(self.title, True, BLACK)
-        text_x = self.panel_rect.centerx - text_surface.get_width() // 2
-        text_y = self.panel_rect.top + 40
-        screen.blit(text_surface, (text_x, text_y))
-
-        for button in self.buttons:
-            button.check_hover(pygame.mouse.get_pos())
-            button.draw(screen)
-
-    def handle_event(self, event):
-        for button in self.buttons:
-            button.handle_event(event)
-        
-        if event.type == pygame.USEREVENT:
-            for button in self.buttons:
-                if event.button == button:
-                    return self.button_actions[button]
-        
-        return None
-                    
 
 class Settings:
     """Настройки и переменные, влияющие на игру."""

@@ -26,15 +26,7 @@ from constants import (
 
 
 def aabb_collide(hitbox1, hitbox2):
-    """
-    Проверка столкновения двух AABB-прямоугольников (Axis-Aligned Bounding Box).
-
-    Два прямоугольника НЕ пересекаются, если один полностью:
-    - левее, правее, выше или ниже другого.
-    Если ни одно из этих условий не выполняется — коллизия есть.
-
-    Возвращает True, если прямоугольники пересекаются.
-    """
+    """Проверка столкновения двух AABB-прямоугольников (Axis-Aligned Bounding Box)."""
     return (
         hitbox1.left <= hitbox2.right
         and hitbox1.right >= hitbox2.left

@@ -193,21 +193,21 @@ class Bonus:
 
         self.effects_type = effects_type
 
-        self.spawn()
-        self.sync_hitbox()
-
-    def spawn(self):
-        self.rect.y = -200
+        # Начальная позиция
+        self.rect.y = -100
         self.rect.x = random.randint(150, 850)
+
+        self.sync_hitbox()
 
     def move(self, world_speed):
         self.rect.y += world_speed
         self.sync_hitbox()
-        if self.rect.top > HEIGHT:
-            self.spawn()
 
     def draw(self, screen):
-        screen.blit(self.image, (self.rect.x, self.rect.y))
+        screen.blit(self.image, self.rect.topleft)
 
     def sync_hitbox(self):
         self.hitbox.center = self.rect.center
+
+    def is_off_screen(self):
+        return self.rect.top > HEIGHT

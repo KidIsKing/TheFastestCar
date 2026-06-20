@@ -3,6 +3,8 @@ import random
 import sys
 
 from entities import Player, Enemy, Road, Bonus
+from bonus_director import BonusDirector
+from score_tracker import ScoreTracker
 from settings import settings
 from button import create_buttons
 from constants import (
@@ -179,14 +181,17 @@ class GameManager:
         self.road = Road()
         self.player = Player()
         self.enemies = [Enemy() for _ in range(3)]
-        self.health_bar = HealthBar(PLAYER_MAX_HEALTH)
-        bonus_types = BONUS_TYPES
-        self.bonuses = []
-        for _ in range(random.randint(MIN_BONUSES_COUNT, MAX_BONUSES_COUNT)):
-            bonus_type = random.choice(bonus_types)
-            self.bonuses.append(Bonus(ASSETS[bonus_type], bonus_type))
 
-        self.score = 0
+        self.health_bar = HealthBar(PLAYER_MAX_HEALTH)
+
+        self.bonus_director = BonusDirector()
+        self.bonuses = []
+
+        # Таймер проверки спавна (проверка раз в 10 кадров)
+        self.spawn_check_counter = 0
+        self.spawn_check_interval = 10
+
+        self.score_tracer = ScoreTracker()
 
         self.current_world_speed = settings.base_world_speed
         self.player_visual_offset_y = 0
@@ -248,30 +253,28 @@ class GameManager:
         self.player = Player()
         self.enemies = [Enemy() for _ in range(3)]
         self.road = Road()
-        bonus_types = BONUS_TYPES
-        self.bonuses = []
-        for _ in range(random.randint(MIN_BONUSES_COUNT, MAX_BONUSES_COUNT)):
-            bonus_type = random.choice(bonus_types)
-            self.bonuses.append(Bonus(ASSETS[bonus_type], bonus_type))
-        self.score = 0
-        GameManager.best_score = max(GameManager.best_score, self.score)
+
         self.health_bar.update(PLAYER_MAX_HEALTH)
+
+        self.bonus_director = BonusDirector()
+        self.bonuses = []
+
+        self.spawn_check_counter = 0
+
+        self.score_tracer.reset()
+
         self.collided_enemy = None
         self.current_world_speed = settings.base_world_speed
         self.player_visual_offset_y = 0
         self.game_over = False
 
-    def check_experience(self):
-        if self.score > GameManager.best_score:
-            GameManager.best_score = self.score
-
     def draw_score(self):
         font = pygame.font.SysFont(None, 30)
         text = font.render(
-            f"Счёт: {self.score}. Рекорд: {GameManager.best_score}",
+            f"Счёт: {self.score_tracer.score}. Рекорд: {ScoreTracker.get_best_score()}",
             True, WHITE
         )
-        text_rect = text.get_rect(topright=(200, HEIGHT - 20))
+        text_rect = text.get_rect(topright=(1000, 0))
         self.screen.blit(text, text_rect)
 
     def calculate_damage(self):
@@ -279,6 +282,47 @@ class GameManager:
         damage = random.gauss(BASE_DAMAGE, DAMAGE_SPREAD)
         damage = max(DAMAGE_MIN, min(DAMAGE_MAX, int(damage)))
         return damage
+
+    def take_health(self, enemy):
+        """Отнимаем здоровье игрока."""
+        if self.player.invulnerable:
+            return
+
+        damage = self.calculate_damage()
+
+        self.player.health -= damage
+
+        self.health_bar.update(self.player.health)
+
+        self.player.invulnerable = True
+        self.player.invulnerable_timer = PLAYER_INVULNERABLE_DURATION
+
+        if self.player.health <= 0:
+            self.game_over = True
+            self.collided_enemy = enemy
+
+    def apply_bonus(self, bonus):
+        """Применение эффекта бонуса в зависимости от типа."""
+        if bonus.effects_type == "hp":
+            self.give_health()
+        elif bonus.effects_type == "ex":
+            self.give_experience()
+
+    def give_experience(self):
+        """Начисление опыта."""
+        experience = self.bonus_director.calculate_experience(
+            self.current_world_speed
+        )
+        self.score_tracer.add_score(experience)
+
+    def give_health(self):
+        """Начисление здоровья."""
+        health_from_bonus = self.bonus_director.calculate_health_bonus()
+        self.player.health = min(
+            self.player.max_health,
+            self.player.health + health_from_bonus
+        )
+        self.health_bar.update(self.player.health)
 
     def check_enemies_collision(self):
         """Проверка столкновений врагов друг с другом через AABB."""
@@ -309,28 +353,6 @@ class GameManager:
         if top_enemy.rect.bottom > bottom_enemy.rect.top - min_gap:
             top_enemy.rect.bottom = bottom_enemy.rect.top - min_gap
 
-    def apply_bonus(self, bonus):
-        """Применение эффекта бонуса в зависимости от типа."""
-        if bonus.effects_type == "hp":
-            self.give_health()
-        elif bonus.effects_type == "ex":
-            self.give_experience()
-
-    def give_health(self):
-        """Добавляем здоровье игрока."""
-        health_from_bonus = self.calculate_damage()
-        self.player.health += health_from_bonus
-        self.player.health = min(
-            self.player.max_health,
-            self.player.health + health_from_bonus
-        )
-        self.health_bar.update(self.player.health)
-
-    def give_experience(self):
-        """Добавляем опыт игроку (заглушка)."""
-        experience = self.calculate_damage()
-        self.score += experience
-
     def check_player_bonuses_collision(self):
         if self.game_over:
             return
@@ -338,26 +360,8 @@ class GameManager:
         for bonus in self.bonuses:
             if aabb_collide(self.player.hitbox, bonus.hitbox):
                 self.apply_bonus(bonus)
-                bonus.spawn()
+                self.bonuses.remove(bonus)  # удаляем бонус
                 return
-
-    def take_health(self, enemy):
-        """Отнимаем здоровье игрока."""
-        if self.player.invulnerable:
-            return
-
-        damage = self.calculate_damage()
-
-        self.player.health -= damage
-
-        self.health_bar.update(self.player.health)
-
-        self.player.invulnerable = True
-        self.player.invulnerable_timer = PLAYER_INVULNERABLE_DURATION
-
-        if self.player.health <= 0:
-            self.game_over = True
-            self.collided_enemy = enemy
 
     def check_player_enemy_collision(self):
         """Проверка столкновений игрока с врагами через AABB."""
@@ -414,6 +418,24 @@ class GameManager:
             target_offset - self.player_visual_offset_y
         ) * 0.1
 
+    def _check_bonus_spawn(self):
+        """Проверка необходимости спавна бонуса через режиссёра."""
+        if len(self.bonuses) >= 2:  # не более двух бонусов на экране
+            return
+
+        bonus_type = self.bonus_director.should_spawn_bonus(
+            self.player,
+            self.current_world_speed
+            )
+
+        if bonus_type is not None:
+            count = self.bonus_director.get_bonus_count()
+
+            count = min(count, 2 - len(self.bonuses))
+
+            for _ in range(count):
+                self.bonuses.append(Bonus(ASSETS[bonus_type], bonus_type))
+
     def update(self):
         """Обновление состояния игры."""
         if self.game_over:
@@ -422,8 +444,6 @@ class GameManager:
                     enemy.move(
                         self.current_world_speed * 0.02
                     )  # нетронутые враги продолжают двигаться
-            for bonus in self.bonuses:
-                bonus.move(self.current_world_speed * 0.2)
             return
 
         self.player.update_invulnerable()
@@ -432,18 +452,24 @@ class GameManager:
         self._update_world_speed()
         self._update_player_visual_offset()
 
+        self.spawn_check_counter += 1
+        if self.spawn_check_counter >= self.spawn_check_interval:
+            self.spawn_check_counter = 0
+            self._check_bonus_spawn()
+
+        # Удаляем бонусы, ушедшие за экран
+        self.bonuses = [b for b in self.bonuses if not b.is_off_screen()]
+
         self.road.move(self.current_world_speed)
         for enemy in self.enemies:
             enemy.move(self.current_world_speed)
-        self.player.move()
         for bonus in self.bonuses:
             bonus.move(self.current_world_speed)
+        self.player.move()
 
         # Смещение игрока
         self.player.rect.y = self.player.base_y - self.player_visual_offset_y
         self.player.sync_hitbox()
-
-        self.check_experience()
 
         # Проверки коллизий через AABB
         self.check_enemies_collision()

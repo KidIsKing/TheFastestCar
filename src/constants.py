@@ -83,5 +83,6 @@ ASSETS = {
     "enemy_car": ASSETS_PATH + "images/cars/enemy_car.png",
     "road": ASSETS_PATH + "images/road.png",
     "hp": ASSETS_PATH + "images/bonuses/hp.png",
-    "ex": ASSETS_PATH + "images/bonuses/ex.png"
+    "ex": ASSETS_PATH + "images/bonuses/ex.png",
+    "bonus_sound": ASSETS_PATH + "sounds/bonus.mp3"
 }

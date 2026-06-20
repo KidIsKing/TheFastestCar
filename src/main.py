@@ -2,7 +2,7 @@ import pygame
 import random
 import sys
 
-from entities import Player, Enemy, Road, Bonus
+from entities import Player, Enemy, Road, Bonus, FloatingText, Overlay, HealthBar
 from bonus_director import BonusDirector
 from score_tracker import ScoreTracker
 from settings import settings
@@ -14,11 +14,6 @@ from constants import (
     FPS,
     PLAYER_MAX_HEALTH, PLAYER_INVULNERABLE_DURATION, BASE_DAMAGE,
     DAMAGE_SPREAD, DAMAGE_MIN, DAMAGE_MAX,
-    HEALTH_BAR_WIDTH,
-    HEALTH_BAR_HEIGHT,
-    HEALTH_BAR_X,
-    HEALTH_BAR_Y,
-    HEALTH_BAR_BORDER,
     WHITE,
     BLACK,
     GREEN,
@@ -26,10 +21,7 @@ from constants import (
     YELLOW,
     FADE_SPEED,
     MAX_FADE_ALPHA,
-    ASSETS,
-    MAX_BONUSES_COUNT,
-    MIN_BONUSES_COUNT,
-    BONUS_TYPES
+    ASSETS
 )
 
 
@@ -49,125 +41,6 @@ def aabb_collide(hitbox1, hitbox2):
         and hitbox1.top <= hitbox2.bottom
         and hitbox1.bottom >= hitbox2.top
     )
-
-
-class Overlay:
-    """Окно поверх игры."""
-
-    PANEL_WIDTH = 500
-    PANEL_HEIGHT = 400
-    OVERLAY_ALPHA = 150
-    BUTTON_SPACING = 100  # расстояние между кнопками по Y
-    FIRST_BUTTON_Y = 330
-
-    def __init__(self, title, button_configs):
-        """
-        title — текст заголовка (например, "Game Over")
-        button_configs — список кортежей (text, action_name)
-        """
-        self.title = title
-        self.buttons = []
-        self.button_actions = {}  # {кнопка: имя действия}
-
-        self.panel_rect = pygame.Rect(
-            WIDTH // 2 - self.PANEL_WIDTH // 2,
-            HEIGHT // 2 - self.PANEL_HEIGHT // 2,
-            self.PANEL_WIDTH,
-            self.PANEL_HEIGHT,
-        )
-
-        self.title_font = pygame.font.SysFont(None, 96)
-
-        self._create_button(button_configs)
-
-    def _create_button(self, button_configs):
-        for i, (text, action_name) in enumerate(button_configs):
-            y_pos = self.FIRST_BUTTON_Y + i * self.BUTTON_SPACING
-            button = create_buttons(text, y_pos, "green")
-            self.buttons.append(button)
-            self.button_actions[button] = action_name
-
-    def draw(self, screen):
-        # Полупрозрачный тёмный фон поверх всей игры
-        overlay = pygame.Surface((WIDTH, HEIGHT))
-        overlay.fill(BLACK)
-        overlay.set_alpha(self.OVERLAY_ALPHA)
-        screen.blit(overlay, (0, 0))
-
-        pygame.draw.rect(screen, WHITE, self.panel_rect)
-        pygame.draw.rect(screen, BLACK, self.panel_rect, 3)  # рамка
-
-        text_surface = self.title_font.render(self.title, True, BLACK)
-        text_x = self.panel_rect.centerx - text_surface.get_width() // 2
-        text_y = self.panel_rect.top + 40
-        screen.blit(text_surface, (text_x, text_y))
-
-        for button in self.buttons:
-            button.check_hover(pygame.mouse.get_pos())
-            button.draw(screen)
-
-    def handle_event(self, event):
-        for button in self.buttons:
-            button.handle_event(event)
-
-        if event.type == pygame.USEREVENT:
-            for button in self.buttons:
-                if event.button == button:
-                    return self.button_actions[button]
-
-        return None
-
-
-class HealthBar:
-    """Полоска здоровья."""
-
-    def __init__(self, max_health):
-        self.max_health = max_health
-        self.current_health = max_health
-
-        self.font = pygame.font.SysFont(None, 30)
-
-    def update(self, health):
-        self.current_health = max(0, health)  # не ниже 0
-
-    def draw(self, screen):
-        # Фон полоски
-        pygame.draw.rect(
-            screen,
-            (50, 50, 50),
-            (HEALTH_BAR_X, HEALTH_BAR_Y, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT),
-        )
-
-        # Динамическое заполнение
-        health_ratio = self.current_health / self.max_health
-        fill_width = int(HEALTH_BAR_WIDTH * health_ratio)
-
-        if health_ratio > 0.5:
-            color = GREEN
-        elif health_ratio > 0.25:
-            color = YELLOW
-        else:
-            color = RED
-
-        pygame.draw.rect(
-            screen, color, (HEALTH_BAR_X, HEALTH_BAR_Y, fill_width, HEALTH_BAR_HEIGHT)
-        )
-        # Рамка
-        pygame.draw.rect(
-            screen,
-            WHITE,
-            (HEALTH_BAR_X, HEALTH_BAR_Y, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT),
-            HEALTH_BAR_BORDER,
-        )
-
-        text = self.font.render(f"{self.current_health}/{self.max_health}", True, WHITE)
-        text_rect = text.get_rect(
-            center=(
-                HEALTH_BAR_X + HEALTH_BAR_WIDTH // 2,
-                HEALTH_BAR_Y + HEALTH_BAR_HEIGHT // 2,
-            )
-        )
-        screen.blit(text, text_rect)
 
 
 class GameManager:
@@ -192,6 +65,10 @@ class GameManager:
         self.spawn_check_interval = 10
 
         self.score_tracer = ScoreTracker()
+
+        self.floating_texts = []  # список активных всплывающих текстов
+
+        self.bonus_sound = pygame.mixer.Sound(ASSETS["bonus_sound"])
 
         self.current_world_speed = settings.base_world_speed
         self.player_visual_offset_y = 0
@@ -259,6 +136,8 @@ class GameManager:
         self.bonus_director = BonusDirector()
         self.bonuses = []
 
+        self.floating_texts = []
+
         self.spawn_check_counter = 0
 
         self.score_tracer.reset()
@@ -267,6 +146,13 @@ class GameManager:
         self.current_world_speed = settings.base_world_speed
         self.player_visual_offset_y = 0
         self.game_over = False
+
+    def _create_floating_text(self, text, color=WHITE):
+        """Всплывающий текст над игроком."""
+        # Позиция: над игроком, по центру
+        x = self.player.rect.centerx - 30  # смещение для центрирования
+        y = self.player.rect.top - 20
+        self.floating_texts.append(FloatingText(text, x, y, color))
 
     def draw_score(self):
         font = pygame.font.SysFont(None, 30)
@@ -307,6 +193,7 @@ class GameManager:
             self.give_health()
         elif bonus.effects_type == "ex":
             self.give_experience()
+        self.bonus_sound.play()
 
     def give_experience(self):
         """Начисление опыта."""
@@ -314,6 +201,8 @@ class GameManager:
             self.current_world_speed
         )
         self.score_tracer.add_score(experience)
+
+        self._create_floating_text(f"+{experience} EXP", YELLOW)
 
     def give_health(self):
         """Начисление здоровья."""
@@ -323,6 +212,8 @@ class GameManager:
             self.player.health + health_from_bonus
         )
         self.health_bar.update(self.player.health)
+
+        self._create_floating_text(f"+{health_from_bonus} HP", GREEN)
 
     def check_enemies_collision(self):
         """Проверка столкновений врагов друг с другом через AABB."""
@@ -466,6 +357,10 @@ class GameManager:
         for bonus in self.bonuses:
             bonus.move(self.current_world_speed)
         self.player.move()
+        for text in self.floating_texts:
+            text.update()
+
+        self.floating_texts = [t for t in self.floating_texts if not t.is_expired()]
 
         # Смещение игрока
         self.player.rect.y = self.player.base_y - self.player_visual_offset_y
@@ -495,6 +390,8 @@ class GameManager:
         for bonus in self.bonuses:
             bonus.draw(self.screen)
 
+        for text in self.floating_texts:
+            text.draw(self.screen)
         self.health_bar.draw(self.screen)
         self.draw_score()
 

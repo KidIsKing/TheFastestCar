@@ -133,5 +133,8 @@ ASSETS = {
     "ex": ASSETS_PATH + "images/bonuses/ex.png",
     "bonus_sound": ASSETS_PATH + "sounds/bonus.mp3",
     "damage_sound": ASSETS_PATH + "sounds/damage.mp3",
-    "car_crash_sound": ASSETS_PATH + "sounds/car_crash.mp3"
+    "car_crash_sound": ASSETS_PATH + "sounds/car_crash.mp3",
+    "music": ASSETS_PATH + "sounds/music.mp3",
+    "engine_sound": ASSETS_PATH + "sounds/engine_sound.mp3",
+    "brake_sound": ASSETS_PATH + "sounds/brake_sound.mp3",
 }

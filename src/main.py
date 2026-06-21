@@ -7,6 +7,7 @@ from entities import (
 )
 from bonus_director import BonusDirector
 from score_tracker import ScoreTracker
+from music_manager import MusicManager
 from settings import settings
 from button import create_buttons
 from constants import (
@@ -15,25 +16,234 @@ from constants import (
     DAMAGE_SPREAD, DAMAGE_MIN, DAMAGE_MAX, WHITE, BLACK, GREEN, RED, YELLOW,
     MAX_FADE_ALPHA, ASSETS, SPAWN_CHECK_INTERVAL, MAX_BONUSES_ON_SCREEN,
     OFFSET_X_FLOATING_TEXT, OFFSET_Y_FLOATING_TEXT,
-    POSITION_X_FOR_STAT, POSITION_Y_FOR_STAT,
-    DEBAG_BORDER, Y_BUTTON, BUTTON_SPACING
+    POSITION_X_FOR_STAT, POSITION_Y_FOR_STAT, DEBAG_BORDER,
+    Y_BUTTON, BUTTON_SPACING
 )
 
 
-def aabb_collide(hitbox1, hitbox2):
-    """Проверка столкновения двух AABB-прямоугольников."""
-    return (
-        hitbox1.left <= hitbox2.right
-        and hitbox1.right >= hitbox2.left
-        and hitbox1.top <= hitbox2.bottom
-        and hitbox1.bottom >= hitbox2.top
-    )
+class MenuManager:
+    def __init__(self):
+        pygame.init()
+
+        self.running = True
+        self.window = "menu"  # какое окно отображать
+        self.game_manager = None  # GameManager создаётся при входе в игру
+
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("TheFastestCar")
+        self.main_background = pygame.image.load(ASSETS["main_background"])
+
+        self.clock = pygame.time.Clock()
+
+        self.first_font = pygame.font.SysFont(None, 72)
+        self.second_font = pygame.font.SysFont(None, 40)
+
+        self.music_manager = MusicManager()
+        self.music_manager.start_music()
+
+        # Переменные для затухания
+        self.transition_state = None  # None, "fade_out", "fade_in"
+        self.target_window = None  # целевое окно после затухания
+        self.fade_alpha = 0  # уровень прозрачности для затухания
+        self.fade_speed = FADE_SPEED  # скорость затухания
+
+        # Создание кнопок
+        self.start_button = create_buttons("Играть", Y_BUTTON, "green")
+        self.settings_button = create_buttons(
+            "Настройки",
+            Y_BUTTON + BUTTON_SPACING,
+            "green"
+        )
+        self.exit_button = create_buttons(
+            "Выйти",
+            Y_BUTTON + 2*BUTTON_SPACING,
+            "red"
+        )
+        self.oncoming_traffic_button = create_buttons(
+            "Встречка",
+            Y_BUTTON,
+            "green"
+        )
+        self.back_button = create_buttons(
+            "Назад",
+            Y_BUTTON + BUTTON_SPACING,
+            "green"
+        )
+        self.buttons_list = []
+
+    def start_transition(self, target):
+        """Старт анимации затухания и установка целевого окна."""
+        if self.transition_state is None:
+            self.target_window = target
+            self.transition_state = "fade_out"
+            self.fade_alpha = 0
+
+    def apply_transition(self):
+        """Управление логикой затухания."""
+        # Логика затухания
+        if self.transition_state == "fade_out":
+            self.fade_alpha += self.fade_speed
+            if self.fade_alpha >= MAX_FADE_ALPHA:
+                self.fade_alpha = MAX_FADE_ALPHA
+                # Переключение экрана пока окно чёрное
+                self.window = self.target_window
+                # Переключаем режим на осветление
+                self.transition_state = "fade_in"
+
+        # Логика осветления
+        elif self.transition_state == "fade_in":
+            self.fade_alpha -= self.fade_speed
+            if self.fade_alpha <= 0:
+                self.fade_alpha = 0
+                self.transition_state = None  # завершаем анимацию
+
+        # Чёрный полупрозрачный слой для эффекта затухания поверх окна
+        if self.transition_state is not None:
+            fade_surface = pygame.Surface((WIDTH, HEIGHT))
+            fade_surface.fill(BLACK)
+            fade_surface.set_alpha(self.fade_alpha)
+            self.screen.blit(fade_surface, (0, 0))
+
+    def handle_event(self):
+        """Обработка событий."""
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.running = False
+
+            if (
+                self.window == "settings"
+                and event.type == pygame.KEYDOWN
+                and event.key == pygame.K_ESCAPE
+            ):
+                self.start_transition("menu")
+
+            if self.window == "game" and self.game_manager is not None:
+                self.game_manager.handle_events(event)
+
+            # Обработка событий для кнопок
+            for button in self.buttons_list:
+                button.handle_event(event)
+
+            if event.type == pygame.USEREVENT:
+                if event.button == self.start_button:
+                    self.start_transition("game")
+                elif event.button == self.settings_button:
+                    self.start_transition("settings")
+                elif event.button == self.back_button:
+                    self.start_transition("menu")
+                elif event.button == self.exit_button:
+                    self.running = False
+                elif event.button == self.oncoming_traffic_button:
+                    settings.oncoming_traffic_enabled = (
+                        not settings.oncoming_traffic_enabled
+                    )
+
+    def draw_background(self, background):
+        """Базовая отрисовка фона"""
+        self.screen.fill(BLACK)
+        self.screen.blit(background, (-350, -100))
+
+    def draw_text(self, text, font, color, x_pos, y_pos):
+        """Отрисовка текста."""
+        text_surface = font.render(text, True, color)
+        self.screen.blit(text_surface, (x_pos, y_pos))
+
+    def draw_buttons(self):
+        "Базовая отрисовка кнопок."
+        for button in self.buttons_list:
+            button.check_hover(pygame.mouse.get_pos())
+            button.draw(self.screen)
+
+    def draw_main_menu(self):
+        """Отрисовка главного меню."""
+        self.draw_background(self.main_background)
+        self.draw_text(
+            "TheFastestCar. Главное меню",
+            self.first_font,
+            WHITE,
+            168,
+            110)
+        self.draw_text(
+            "Игра для экзамена по программированию. by Яна Масалова",
+            self.second_font,
+            WHITE,
+            130,
+            170,
+        )
+        # Обработка и отрисовка кнопок
+        self.draw_buttons()
+
+    def draw_settings_menu(self):
+        """Отрисовка меню настроек."""
+        self.draw_background(self.main_background)
+        self.draw_text("Настройки", self.first_font, WHITE, 415, 110)
+
+        # Показываем текущее состояние встречки
+        traffic_status = "ВКЛ" if settings.oncoming_traffic_enabled else "ВЫКЛ"
+        self.draw_text(
+            f"Встречка: {traffic_status}",
+            self.second_font,
+            WHITE,
+            440,
+            230
+        )
+
+        # Обработка и отрисовка кнопок
+        self.draw_buttons()
+
+    def run(self):
+        """Бесконечный игровой цикл."""
+        while self.running:
+            self.handle_event()
+
+            if self.window == "game":
+                if self.game_manager is None:
+                    self.game_manager = GameManager(
+                        self.screen, self.music_manager
+                    )
+                elif not self.game_manager.running:
+                    if self.transition_state is None:
+                        self.start_transition("menu")
+
+            if self.window == "menu":
+                self.buttons_list = [
+                    self.start_button,
+                    self.settings_button,
+                    self.exit_button,
+                ]
+                self.draw_main_menu()
+            elif self.window == "settings":
+                self.buttons_list = [
+                    self.oncoming_traffic_button,
+                    self.back_button,
+                ]
+                self.draw_settings_menu()
+
+            elif self.window == "game" and self.game_manager is not None:
+                self.buttons_list = []
+                self.game_manager.run()
+
+            self.apply_transition()
+
+            if (
+                self.window == "menu"
+                and self.game_manager is not None
+                and self.transition_state is None
+            ):
+                self.game_manager = None
+
+            pygame.display.flip()
+            self.clock.tick(FPS)
+
+        pygame.quit()
+        sys.exit()
 
 
 class GameManager:
     """Менеджер игры."""
-    def __init__(self, screen):
+    def __init__(self, screen, music_manager):
         self.screen = screen
+        self.music_manager = music_manager
 
         self.road = Road()
         self.player = Player()
@@ -55,11 +265,6 @@ class GameManager:
         self.score_tracker = ScoreTracker()
 
         self.floating_texts = []  # список активных всплывающих текстов
-
-        self.bonus_sound = pygame.mixer.Sound(ASSETS["bonus_sound"])
-        self.damage_sound = pygame.mixer.Sound(ASSETS["damage_sound"])
-        self.damage_sound.set_volume(0.1)
-        self.car_crash_sound = pygame.mixer.Sound(ASSETS["car_crash_sound"])
 
         self.current_world_speed = settings.base_world_speed
         self.player_visual_offset_y = 0
@@ -91,6 +296,7 @@ class GameManager:
         # Обработка экранчика проигрыша
         if self.game_over:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                self.music_manager.stop_all()
                 self.running = False
                 return
 
@@ -98,6 +304,7 @@ class GameManager:
             if action == "restart":
                 self.restart_game()
             elif action == "to_menu":
+                self.music_manager.stop_all()
                 self.running = False
             return
 
@@ -106,12 +313,14 @@ class GameManager:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.game_pause = False
                 self.update_time()
+                self.music_manager.toggle_pause_all()
                 return
 
             action = self.pause_overlay.handle_event(event)
             if action == "continue":
                 self.game_pause = False
                 self.update_time()
+                self.music_manager.toggle_pause_all()
             elif action == "to_menu":
                 self.running = False
             return
@@ -120,6 +329,7 @@ class GameManager:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.game_pause = True
             self.update_time()
+            self.music_manager.toggle_pause_all()
             return
 
         # Включение/выключение дебаг-режима
@@ -127,6 +337,8 @@ class GameManager:
             self.debug_mode = not self.debug_mode
 
     def restart_game(self):
+        self.music_manager.stop_all()
+
         self.player = Player()
         self.enemies = [Enemy() for _ in range(3)]
         self.road = Road()
@@ -173,9 +385,9 @@ class GameManager:
         if self.player.health <= 0:
             self.game_over = True
             self.collided_enemy = enemy
-            self.car_crash_sound.play()
+            self.music_manager.play_crash()
         else:
-            self.damage_sound.play()
+            self.music_manager.play_damage()
 
         self._create_floating_text(f"-{damage} HP", RED)
 
@@ -184,7 +396,7 @@ class GameManager:
         handler = self.bonus_handlers.get(bonus.effects_type)
         if handler:
             handler()
-        self.bonus_sound.play()
+        self.music_manager.play_bonus()
 
     def give_experience(self):
         """Начисление опыта."""
@@ -329,15 +541,27 @@ class GameManager:
         if self.game_over:
             for enemy in self.enemies:
                 if enemy is not self.collided_enemy:
-                    # Нетронутые враги продолжают двигаться медленне
                     enemy.move(self.current_world_speed * 0.02)
             return
 
         self.time_alive_ms += dt
 
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            self.music_manager.start_engine()
+        else:
+            self.music_manager.stop_engine()
+
+        # Громкость двигателя зависит от текущей скорости
+        speed_range = settings.max_world_speed - settings.min_world_speed
+        if speed_range > 0:
+            speed_ratio = (
+                (self.current_world_speed - settings.min_world_speed) / speed_range
+            )
+            self.music_manager.update_engine_volume(speed_ratio)
+
         self.player.update_invulnerable()
 
-        # Обновляем скорость и смещение
         self._update_world_speed()
         self._update_player_visual_offset()
 
@@ -346,7 +570,6 @@ class GameManager:
             self.spawn_check_counter = 0
             self._check_bonus_spawn()
 
-        # Удаляем бонусы, ушедшие за экран
         self.bonuses = [b for b in self.bonuses if not b.is_off_screen()]
 
         self.road.move(self.current_world_speed)
@@ -362,11 +585,9 @@ class GameManager:
             t for t in self.floating_texts if not t.is_expired()
         ]
 
-        # Смещение игрока
         self.player.rect.y = self.player.base_y - self.player_visual_offset_y
         self.player.sync_hitbox()
 
-        # Проверки коллизий через AABB
         self.check_enemies_collision()
         self.check_player_enemy_collision()
         self.check_player_bonuses_collision()
@@ -447,217 +668,14 @@ class GameManager:
         self.draw()
 
 
-class MenuManager:
-    def __init__(self):
-        pygame.init()
-
-        self.running = True
-        self.window = "menu"  # какое окно отображать
-        self.game_manager = None  # GameManager создаётся при входе в игру
-
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("TheFastestCar")
-        self.main_background = pygame.image.load(ASSETS["main_background"])
-
-        self.clock = pygame.time.Clock()
-
-        self.first_font = pygame.font.SysFont(None, 72)
-        self.second_font = pygame.font.SysFont(None, 40)
-
-        # Переменные для затухания
-        self.transition_state = None  # None, "fade_out", "fade_in"
-        self.target_window = None  # целевое окно после затухания
-        self.fade_alpha = 0  # уровень прозрачности для затухания
-        self.fade_speed = FADE_SPEED  # скорость затухания
-
-        # Создание кнопок
-        self.start_button = create_buttons("Играть", Y_BUTTON, "green")
-        self.settings_button = create_buttons(
-            "Настройки",
-            Y_BUTTON + BUTTON_SPACING,
-            "green"
-        )
-        self.exit_button = create_buttons(
-            "Выйти",
-            Y_BUTTON + 2*BUTTON_SPACING,
-            "red"
-        )
-        self.oncoming_traffic_button = create_buttons(
-            "Встречка",
-            Y_BUTTON,
-            "green"
-        )
-        self.back_button = create_buttons(
-            "Назад",
-            Y_BUTTON + BUTTON_SPACING,
-            "green"
-        )
-        self.buttons_list = []
-
-    def start_transition(self, target):
-        """Старт анимации затухания и установка целевого окна."""
-        if self.transition_state is None:
-            self.target_window = target
-            self.transition_state = "fade_out"
-            self.fade_alpha = 0
-
-    def handle_event(self):
-        """Обработка событий."""
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.running = False
-
-            if (
-                self.window == "settings"
-                and event.type == pygame.KEYDOWN
-                and event.key == pygame.K_ESCAPE
-            ):
-                self.start_transition("menu")
-
-            if self.window == "game" and self.game_manager is not None:
-                self.game_manager.handle_events(event)
-
-            # Обработка событий для кнопок
-            for button in self.buttons_list:
-                button.handle_event(event)
-
-            if event.type == pygame.USEREVENT:
-                if event.button == self.start_button:
-                    self.start_transition("game")
-                elif event.button == self.settings_button:
-                    self.start_transition("settings")
-                elif event.button == self.back_button:
-                    self.start_transition("menu")
-                elif event.button == self.exit_button:
-                    self.running = False
-                elif event.button == self.oncoming_traffic_button:
-                    settings.oncoming_traffic_enabled = (
-                        not settings.oncoming_traffic_enabled
-                    )
-
-    def draw_background(self, background):
-        """Базовая отрисовка фона"""
-        self.screen.fill(BLACK)
-        self.screen.blit(background, (-350, -100))
-
-    def draw_text(self, text, font, color, x_pos, y_pos):
-        """Отрисовка текста."""
-        text_surface = font.render(text, True, color)
-        self.screen.blit(text_surface, (x_pos, y_pos))
-
-    def draw_buttons(self):
-        "Базовая отрисовка кнопок."
-        for button in self.buttons_list:
-            button.check_hover(pygame.mouse.get_pos())
-            button.draw(self.screen)
-
-    def draw_main_menu(self):
-        """Отрисовка главного меню."""
-        self.draw_background(self.main_background)
-        self.draw_text(
-            "TheFastestCar. Главное меню",
-            self.first_font,
-            WHITE,
-            168,
-            110)
-        self.draw_text(
-            "Игра для экзамена по программированию. by Яна Масалова",
-            self.second_font,
-            WHITE,
-            130,
-            170,
-        )
-        # Обработка и отрисовка кнопок
-        self.draw_buttons()
-
-    def draw_settings_menu(self):
-        """Отрисовка меню настроек."""
-        self.draw_background(self.main_background)
-        self.draw_text("Настройки", self.first_font, WHITE, 415, 110)
-
-        # Показываем текущее состояние встречки
-        traffic_status = "ВКЛ" if settings.oncoming_traffic_enabled else "ВЫКЛ"
-        self.draw_text(
-            f"Встречка: {traffic_status}",
-            self.second_font,
-            WHITE,
-            440,
-            230
-        )
-
-        # Обработка и отрисовка кнопок
-        self.draw_buttons()
-
-    def apply_transition(self):
-        """Управление логикой затухания."""
-        # Логика затухания
-        if self.transition_state == "fade_out":
-            self.fade_alpha += self.fade_speed
-            if self.fade_alpha >= MAX_FADE_ALPHA:
-                self.fade_alpha = MAX_FADE_ALPHA
-                # Переключение экрана пока окно чёрное
-                self.window = self.target_window
-                # Переключаем режим на осветление
-                self.transition_state = "fade_in"
-
-        # Логика осветления
-        elif self.transition_state == "fade_in":
-            self.fade_alpha -= self.fade_speed
-            if self.fade_alpha <= 0:
-                self.fade_alpha = 0
-                self.transition_state = None  # завершаем анимацию
-
-        # Чёрный полупрозрачный слой для эффекта затухания поверх окна
-        if self.transition_state is not None:
-            fade_surface = pygame.Surface((WIDTH, HEIGHT))
-            fade_surface.fill(BLACK)
-            fade_surface.set_alpha(self.fade_alpha)
-            self.screen.blit(fade_surface, (0, 0))
-
-    def run(self):
-        """Бесконечный игровой цикл."""
-        while self.running:
-            self.handle_event()
-
-            if self.window == "game":
-                if self.game_manager is None:
-                    self.game_manager = GameManager(self.screen)
-                elif not self.game_manager.running:
-                    if self.transition_state is None:
-                        self.start_transition("menu")
-
-            if self.window == "menu":
-                self.buttons_list = [
-                    self.start_button,
-                    self.settings_button,
-                    self.exit_button,
-                ]
-                self.draw_main_menu()
-            elif self.window == "settings":
-                self.buttons_list = [
-                    self.oncoming_traffic_button,
-                    self.back_button,
-                ]
-                self.draw_settings_menu()
-
-            elif self.window == "game" and self.game_manager is not None:
-                self.buttons_list = []
-                self.game_manager.run()
-
-            self.apply_transition()
-
-            if (
-                self.window == "menu"
-                and self.game_manager is not None
-                and self.transition_state is None
-            ):
-                self.game_manager = None
-
-            pygame.display.flip()
-            self.clock.tick(FPS)
-
-        pygame.quit()
-        sys.exit()
+def aabb_collide(hitbox1, hitbox2):
+    """Проверка столкновения двух AABB-прямоугольников."""
+    return (
+        hitbox1.left <= hitbox2.right
+        and hitbox1.right >= hitbox2.left
+        and hitbox1.top <= hitbox2.bottom
+        and hitbox1.bottom >= hitbox2.top
+    )
 
 
 def main():

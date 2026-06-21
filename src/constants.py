@@ -40,8 +40,8 @@ PLAYER_MAX_HEALTH = 100
 PLAYER_INVULNERABLE_DURATION = 60  # длительность неуязвимости
 
 # Урон (гауссово распределение)
-BASE_DAMAGE = 10
-DAMAGE_SPREAD = 10  # стандартное отклонение (разброс)
+BASE_DAMAGE = 15
+DAMAGE_SPREAD = 6  # стандартное отклонение (разброс)
 DAMAGE_MIN = 5
 DAMAGE_MAX = 15
 
@@ -84,5 +84,7 @@ ASSETS = {
     "road": ASSETS_PATH + "images/road.png",
     "hp": ASSETS_PATH + "images/bonuses/hp.png",
     "ex": ASSETS_PATH + "images/bonuses/ex.png",
-    "bonus_sound": ASSETS_PATH + "sounds/bonus.mp3"
+    "bonus_sound": ASSETS_PATH + "sounds/bonus.mp3",
+    "damage_sound": ASSETS_PATH + "sounds/damage.mp3",
+    "car_crash_sound": ASSETS_PATH + "sounds/car_crash.mp3"
 }

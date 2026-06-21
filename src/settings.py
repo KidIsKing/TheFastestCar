@@ -8,7 +8,7 @@ class Settings:
     """Настройки и переменные, влияющие на игру."""
 
     def __init__(self):
-        self.oncoming_traffic_enabled = False
+        self.oncoming_traffic_enabled = True
 
         # Параметры логики скорости
         self.base_world_speed = BASE_WORLD_SPEED

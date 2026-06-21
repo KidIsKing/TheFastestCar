@@ -2,7 +2,9 @@ import pygame
 import random
 import sys
 
-from entities import Player, Enemy, Road, Bonus, FloatingText, Overlay, HealthBar
+from entities import (
+    Player, Enemy, Road, Bonus, FloatingText, Overlay, HealthBar
+)
 from bonus_director import BonusDirector
 from score_tracker import ScoreTracker
 from settings import settings
@@ -26,7 +28,7 @@ from constants import (
 
 
 def aabb_collide(hitbox1, hitbox2):
-    """Проверка столкновения двух AABB-прямоугольников (Axis-Aligned Bounding Box)."""
+    """Проверка столкновения двух AABB-прямоугольников."""
     return (
         hitbox1.left <= hitbox2.right
         and hitbox1.right >= hitbox2.left
@@ -61,6 +63,9 @@ class GameManager:
         self.floating_texts = []  # список активных всплывающих текстов
 
         self.bonus_sound = pygame.mixer.Sound(ASSETS["bonus_sound"])
+        self.damage_sound = pygame.mixer.Sound(ASSETS["damage_sound"])
+        self.damage_sound.set_volume(0.1)
+        self.car_crash_sound = pygame.mixer.Sound(ASSETS["car_crash_sound"])
 
         self.current_world_speed = settings.base_world_speed
         self.player_visual_offset_y = 0
@@ -72,6 +77,8 @@ class GameManager:
         self.game_pause = False  # Флаг паузы
         self.debug_mode = False
 
+        self.font = pygame.font.SysFont(None, 36)
+
         # Создаём оверлеи
         self.game_over_overlay = Overlay(
             "Игра окончена", [("Начать заново", "restart"), ("Выйти в меню", "to_menu")]
@@ -79,6 +86,9 @@ class GameManager:
         self.pause_overlay = Overlay(
             "Пауза", [("Продолжить", "continue"), ("Выйти в меню", "to_menu")]
         )
+
+        self.last_update_time = pygame.time.get_ticks()
+        self.time_alive_ms = 0
 
     def handle_events(self, event):
         """Обработка нажатий клавиш."""
@@ -99,11 +109,13 @@ class GameManager:
         if self.game_pause:
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 self.game_pause = False
+                self.update_time()
                 return
 
             action = self.pause_overlay.handle_event(event)
             if action == "continue":
                 self.game_pause = False
+                self.update_time()
             elif action == "to_menu":
                 self.running = False
             return
@@ -111,12 +123,12 @@ class GameManager:
         # Запуск окошка паузы при нажатии ESC
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.game_pause = True
+            self.update_time()
+            return
 
         # Включение/выключение дебаг-режима
         if event.type == pygame.KEYDOWN and event.key == pygame.K_F1:
-            self.debug_mode = (
-                not self.debug_mode
-            )  # переключаем режим на обратное значение
+            self.debug_mode = not self.debug_mode
 
     def restart_game(self):
         self.player = Player()
@@ -139,21 +151,8 @@ class GameManager:
         self.player_visual_offset_y = 0
         self.game_over = False
 
-    def _create_floating_text(self, text, color=WHITE):
-        """Всплывающий текст над игроком."""
-        # Позиция: над игроком, по центру
-        x = self.player.rect.centerx - 30  # смещение для центрирования
-        y = self.player.rect.top - 20
-        self.floating_texts.append(FloatingText(text, x, y, color))
-
-    def draw_score(self):
-        font = pygame.font.SysFont(None, 30)
-        text = font.render(
-            f"Счёт: {self.score_tracer.score}. Рекорд: {ScoreTracker.get_best_score()}",
-            True, WHITE
-        )
-        text_rect = text.get_rect(topright=(1000, 0))
-        self.screen.blit(text, text_rect)
+        self.time_alive_ms = 0
+        self.update_time()
 
     def calculate_damage(self):
         """Расчёт урона с гауссовым распределением."""
@@ -178,6 +177,11 @@ class GameManager:
         if self.player.health <= 0:
             self.game_over = True
             self.collided_enemy = enemy
+            self.car_crash_sound.play()
+        else:
+            self.damage_sound.play()
+
+        self._create_floating_text(f"-{damage} HP", RED)
 
     def apply_bonus(self, bonus):
         """Применение эффекта бонуса в зависимости от типа."""
@@ -319,8 +323,15 @@ class GameManager:
             for _ in range(count):
                 self.bonuses.append(Bonus(ASSETS[bonus_type], bonus_type))
 
+    def update_time(self):
+        self.last_update_time = pygame.time.get_ticks()
+
     def update(self):
         """Обновление состояния игры."""
+        current_time = pygame.time.get_ticks()
+        dt = current_time - self.last_update_time
+        self.last_update_time = current_time
+
         if self.game_over:
             for enemy in self.enemies:
                 if enemy is not self.collided_enemy:
@@ -328,6 +339,8 @@ class GameManager:
                         self.current_world_speed * 0.02
                     )  # нетронутые враги продолжают двигаться
             return
+
+        self.time_alive_ms += dt
 
         self.player.update_invulnerable()
 
@@ -363,6 +376,31 @@ class GameManager:
         self.check_player_enemy_collision()
         self.check_player_bonuses_collision()
 
+    def _create_floating_text(self, text, color=WHITE):
+        """Всплывающий текст над игроком."""
+        # Позиция: над игроком, по центру
+        x = self.player.rect.centerx - random.randint(-30, 30)  # смещение для центрирования
+        y = self.player.rect.top - 20
+        self.floating_texts.append(FloatingText(text, x, y, color))
+
+    def draw_score(self):
+        text = self.font.render(
+            f"Счёт: {self.score_tracer.score}. Рекорд: {ScoreTracker.get_best_score()}",
+            True, WHITE
+        )
+        text_rect = text.get_rect(topright=(1080, 10))
+        self.screen.blit(text, text_rect)
+
+    def draw_time_alive(self):
+        seconds = self.time_alive_ms / 1000
+        text = self.font.render(
+            f"Время жизни: {seconds:.2f}",
+            True,
+            WHITE
+        )
+        text_rect = text.get_rect(topright=(1080, 40))
+        self.screen.blit(text, text_rect)
+
     def draw_debug(self):
         """Отрисовка хитбоксов в дебаг-режиме."""
         if not self.debug_mode:
@@ -385,7 +423,9 @@ class GameManager:
         for text in self.floating_texts:
             text.draw(self.screen)
         self.health_bar.draw(self.screen)
+
         self.draw_score()
+        self.draw_time_alive()
 
         self.draw_debug()
 
@@ -396,9 +436,7 @@ class GameManager:
 
     def run(self):
         """Главный процесс игры."""
-        if (
-            self.game_pause or not self.running
-        ):  # если игра заморожена, то не обновляем её
+        if self.game_pause or not self.running:
             self.draw()
             return
 

@@ -33,9 +33,7 @@ class Car:
         self.rect = self.image.get_rect()
         self.hitbox = self.rect.inflate(*hitbox_decrease)  # уменьшаем хитбокс
 
-        self.offset_x = (
-            offset_x  # смещение по оси OX для правки отображения в дебаг-режиме
-        )
+        self.offset_x = offset_x  # смещение по оси OX для правки отображения в дебаг-режиме
 
         self.speed = 0
 
@@ -127,9 +125,11 @@ class Enemy(Car):
 
         # Выбираем ориентацию картинки
         if self.is_oncoming:
+            self.offset_x = ENEMY_OFFSET_X
             self.image = self.image_rotated
             self.base_speed = random.randint(5, 7)  # встречные быстрее
         else:
+            self.offset_x = 4
             self.image = self.image_scaled
             self.base_speed = random.randint(3, 5)  # попутные медленнее
 

@@ -72,10 +72,14 @@ class ImageButton:
         ):
             if self.sound:
                 self.sound.play()
-            pygame.event.post(pygame.event.Event(pygame.USEREVENT, button=self))
+            pygame.event.post(
+                pygame.event.Event(pygame.USEREVENT, button=self)
+            )
 
 
-def create_buttons(text, y_pos, color="green", width=BUTTON_WIDTH, height=BUTTON_HEIGHT):
+def create_buttons(
+    text, y_pos, color="green", width=BUTTON_WIDTH, height=BUTTON_HEIGHT
+):
     return ImageButton(
         WIDTH // 2 - width // 2,
         y_pos,

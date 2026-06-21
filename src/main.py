@@ -10,20 +10,13 @@ from score_tracker import ScoreTracker
 from settings import settings
 from button import create_buttons
 from constants import (
-    WIDTH,
-    HEIGHT,
-    ENEMY_MIN_GAP,
-    FPS,
+    WIDTH, HEIGHT, ENEMY_MIN_GAP, FPS, FADE_SPEED,
     PLAYER_MAX_HEALTH, PLAYER_INVULNERABLE_DURATION, BASE_DAMAGE,
-    DAMAGE_SPREAD, DAMAGE_MIN, DAMAGE_MAX,
-    WHITE,
-    BLACK,
-    GREEN,
-    RED,
-    YELLOW,
-    FADE_SPEED,
-    MAX_FADE_ALPHA,
-    ASSETS
+    DAMAGE_SPREAD, DAMAGE_MIN, DAMAGE_MAX, WHITE, BLACK, GREEN, RED, YELLOW,
+    MAX_FADE_ALPHA, ASSETS, SPAWN_CHECK_INTERVAL, MAX_BONUSES_ON_SCREEN,
+    OFFSET_X_FLOATING_TEXT, OFFSET_Y_FLOATING_TEXT,
+    POSITION_X_FOR_STAT, POSITION_Y_FOR_STAT,
+    DEBAG_BORDER, Y_BUTTON, BUTTON_SPACING
 )
 
 
@@ -39,9 +32,6 @@ def aabb_collide(hitbox1, hitbox2):
 
 class GameManager:
     """Менеджер игры."""
-
-    best_score = 0
-
     def __init__(self, screen):
         self.screen = screen
 
@@ -53,12 +43,16 @@ class GameManager:
 
         self.bonus_director = BonusDirector()
         self.bonuses = []
+        self.bonus_handlers = {
+            "hp": self.give_health,
+            "ex": self.give_experience
+        }
 
         # Таймер проверки спавна (проверка раз в 10 кадров)
         self.spawn_check_counter = 0
-        self.spawn_check_interval = 10
+        self.spawn_check_interval = SPAWN_CHECK_INTERVAL
 
-        self.score_tracer = ScoreTracker()
+        self.score_tracker = ScoreTracker()
 
         self.floating_texts = []  # список активных всплывающих текстов
 
@@ -81,10 +75,12 @@ class GameManager:
 
         # Создаём оверлеи
         self.game_over_overlay = Overlay(
-            "Игра окончена", [("Начать заново", "restart"), ("Выйти в меню", "to_menu")]
+            "Игра окончена",
+            [("Начать заново", "restart"), ("Выйти в меню", "to_menu")]
         )
         self.pause_overlay = Overlay(
-            "Пауза", [("Продолжить", "continue"), ("Выйти в меню", "to_menu")]
+            "Пауза",
+            [("Продолжить", "continue"), ("Выйти в меню", "to_menu")]
         )
 
         self.last_update_time = pygame.time.get_ticks()
@@ -144,7 +140,7 @@ class GameManager:
 
         self.spawn_check_counter = 0
 
-        self.score_tracer.reset()
+        self.score_tracker.reset()
 
         self.collided_enemy = None
         self.current_world_speed = settings.base_world_speed
@@ -185,10 +181,9 @@ class GameManager:
 
     def apply_bonus(self, bonus):
         """Применение эффекта бонуса в зависимости от типа."""
-        if bonus.effects_type == "hp":
-            self.give_health()
-        elif bonus.effects_type == "ex":
-            self.give_experience()
+        handler = self.bonus_handlers.get(bonus.effects_type)
+        if handler:
+            handler()
         self.bonus_sound.play()
 
     def give_experience(self):
@@ -196,7 +191,7 @@ class GameManager:
         experience = self.bonus_director.calculate_experience(
             self.current_world_speed
         )
-        self.score_tracer.add_score(experience)
+        self.score_tracker.add_score(experience)
 
         self._create_floating_text(f"+{experience} EXP", YELLOW)
 
@@ -214,7 +209,7 @@ class GameManager:
     def check_enemies_collision(self):
         """Проверка столкновений врагов друг с другом через AABB."""
         for i, enemy in enumerate(self.enemies):
-            for other in self.enemies[i + 1 :]:
+            for other in self.enemies[i+1:]:
                 if not aabb_collide(enemy.hitbox, other.hitbox):
                     continue  # столкновения нет - идём дальше
 
@@ -231,9 +226,8 @@ class GameManager:
 
     def resolve_enemies_collision(self, top_enemy, bottom_enemy):
         """Разрешение столкновения врагов."""
-        top_enemy.speed = min(
-            top_enemy.speed, bottom_enemy.speed
-        )  # верхний враг замедляется до скорости нижнего
+        # Верхний враг замедляется до скорости нижнего
+        top_enemy.speed = min(top_enemy.speed, bottom_enemy.speed)
 
         # Устанавливаем минимальный зазор между врагами, чтобы они не слипались
         min_gap = ENEMY_MIN_GAP
@@ -307,7 +301,7 @@ class GameManager:
 
     def _check_bonus_spawn(self):
         """Проверка необходимости спавна бонуса через режиссёра."""
-        if len(self.bonuses) >= 2:  # не более двух бонусов на экране
+        if len(self.bonuses) >= MAX_BONUSES_ON_SCREEN:
             return
 
         bonus_type = self.bonus_director.should_spawn_bonus(
@@ -318,7 +312,7 @@ class GameManager:
         if bonus_type is not None:
             count = self.bonus_director.get_bonus_count()
 
-            count = min(count, 2 - len(self.bonuses))
+            count = min(count, MAX_BONUSES_ON_SCREEN - len(self.bonuses))
 
             for _ in range(count):
                 self.bonuses.append(Bonus(ASSETS[bonus_type], bonus_type))
@@ -335,9 +329,8 @@ class GameManager:
         if self.game_over:
             for enemy in self.enemies:
                 if enemy is not self.collided_enemy:
-                    enemy.move(
-                        self.current_world_speed * 0.02
-                    )  # нетронутые враги продолжают двигаться
+                    # Нетронутые враги продолжают двигаться медленне
+                    enemy.move(self.current_world_speed * 0.02)
             return
 
         self.time_alive_ms += dt
@@ -365,7 +358,9 @@ class GameManager:
         for text in self.floating_texts:
             text.update()
 
-        self.floating_texts = [t for t in self.floating_texts if not t.is_expired()]
+        self.floating_texts = [
+            t for t in self.floating_texts if not t.is_expired()
+        ]
 
         # Смещение игрока
         self.player.rect.y = self.player.base_y - self.player_visual_offset_y
@@ -378,17 +373,22 @@ class GameManager:
 
     def _create_floating_text(self, text, color=WHITE):
         """Всплывающий текст над игроком."""
-        # Позиция: над игроком, по центру
-        x = self.player.rect.centerx - random.randint(-30, 30)  # смещение для центрирования
-        y = self.player.rect.top - 20
+        # Позиция по OX со случайным смещением
+        x = (self.player.rect.centerx -
+             random.randint(-OFFSET_X_FLOATING_TEXT, OFFSET_X_FLOATING_TEXT))
+        y = self.player.rect.top - OFFSET_Y_FLOATING_TEXT
         self.floating_texts.append(FloatingText(text, x, y, color))
 
     def draw_score(self):
         text = self.font.render(
-            f"Счёт: {self.score_tracer.score}. Рекорд: {ScoreTracker.get_best_score()}",
-            True, WHITE
+            (f"Счёт: {self.score_tracker.score}. "
+             f"Рекорд: {ScoreTracker.get_best_score()}"),
+            True,
+            WHITE
         )
-        text_rect = text.get_rect(topright=(1080, 10))
+        text_rect = text.get_rect(
+            topright=(POSITION_X_FOR_STAT, POSITION_Y_FOR_STAT)
+        )
         self.screen.blit(text, text_rect)
 
     def draw_time_alive(self):
@@ -398,7 +398,10 @@ class GameManager:
             True,
             WHITE
         )
-        text_rect = text.get_rect(topright=(1080, 40))
+        text_rect = text.get_rect(
+            # 4 - смещение по OY
+            topright=(POSITION_X_FOR_STAT, POSITION_Y_FOR_STAT*4)
+        )
         self.screen.blit(text, text_rect)
 
     def draw_debug(self):
@@ -406,10 +409,10 @@ class GameManager:
         if not self.debug_mode:
             return  # ничего не делаем
 
-        pygame.draw.rect(self.screen, GREEN, self.player.hitbox, 2)
+        pygame.draw.rect(self.screen, GREEN, self.player.hitbox, DEBAG_BORDER)
 
         for enemy in self.enemies:
-            pygame.draw.rect(self.screen, RED, enemy.hitbox, 2)
+            pygame.draw.rect(self.screen, RED, enemy.hitbox, DEBAG_BORDER)
 
     def draw(self):
         """Отрисовка игрового экрана."""
@@ -446,8 +449,20 @@ class GameManager:
 
 class MenuManager:
     def __init__(self):
+        pygame.init()
+
         self.running = True
         self.window = "menu"  # какое окно отображать
+        self.game_manager = None  # GameManager создаётся при входе в игру
+
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("TheFastestCar")
+        self.main_background = pygame.image.load(ASSETS["main_background"])
+
+        self.clock = pygame.time.Clock()
+
+        self.first_font = pygame.font.SysFont(None, 72)
+        self.second_font = pygame.font.SysFont(None, 40)
 
         # Переменные для затухания
         self.transition_state = None  # None, "fade_out", "fade_in"
@@ -455,26 +470,28 @@ class MenuManager:
         self.fade_alpha = 0  # уровень прозрачности для затухания
         self.fade_speed = FADE_SPEED  # скорость затухания
 
-        pygame.init()
-
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("TheFastestCar")
-        self.main_background = pygame.image.load(ASSETS["main_background"])
-        self.clock = pygame.time.Clock()
-
-        # Режимы
-        self.game_manager = None  # объект GameManager будет создан при входе в игру
-
-        self.first_font = pygame.font.SysFont(None, 72)
-        self.second_font = pygame.font.SysFont(None, 40)
-
         # Создание кнопок
-        self.start_button = create_buttons("Играть", 300, "green")
-        self.settings_button = create_buttons("Настройки", 400, "green")
-        self.exit_button = create_buttons("Выйти", 500, "red")
-        self.oncoming_traffic_button = create_buttons("Встречка", 300, "green")
-        self.back_button = create_buttons("Назад", 400, "green")
-
+        self.start_button = create_buttons("Играть", Y_BUTTON, "green")
+        self.settings_button = create_buttons(
+            "Настройки",
+            Y_BUTTON + BUTTON_SPACING,
+            "green"
+        )
+        self.exit_button = create_buttons(
+            "Выйти",
+            Y_BUTTON + 2*BUTTON_SPACING,
+            "red"
+        )
+        self.oncoming_traffic_button = create_buttons(
+            "Встречка",
+            Y_BUTTON,
+            "green"
+        )
+        self.back_button = create_buttons(
+            "Назад",
+            Y_BUTTON + BUTTON_SPACING,
+            "green"
+        )
         self.buttons_list = []
 
     def start_transition(self, target):
@@ -537,7 +554,12 @@ class MenuManager:
     def draw_main_menu(self):
         """Отрисовка главного меню."""
         self.draw_background(self.main_background)
-        self.draw_text("TheFastestCar. Главное меню", self.first_font, WHITE, 168, 110)
+        self.draw_text(
+            "TheFastestCar. Главное меню",
+            self.first_font,
+            WHITE,
+            168,
+            110)
         self.draw_text(
             "Игра для экзамена по программированию. by Яна Масалова",
             self.second_font,
@@ -555,7 +577,13 @@ class MenuManager:
 
         # Показываем текущее состояние встречки
         traffic_status = "ВКЛ" if settings.oncoming_traffic_enabled else "ВЫКЛ"
-        self.draw_text(f"Встречка: {traffic_status}", self.second_font, WHITE, 440, 230)
+        self.draw_text(
+            f"Встречка: {traffic_status}",
+            self.second_font,
+            WHITE,
+            440,
+            230
+        )
 
         # Обработка и отрисовка кнопок
         self.draw_buttons()
@@ -567,8 +595,10 @@ class MenuManager:
             self.fade_alpha += self.fade_speed
             if self.fade_alpha >= MAX_FADE_ALPHA:
                 self.fade_alpha = MAX_FADE_ALPHA
-                self.window = self.target_window  # переключение экрана пока окно чёрное
-                self.transition_state = "fade_in"  # переключаем режим на осветление
+                # Переключение экрана пока окно чёрное
+                self.window = self.target_window
+                # Переключаем режим на осветление
+                self.transition_state = "fade_in"
 
         # Логика осветления
         elif self.transition_state == "fade_in":

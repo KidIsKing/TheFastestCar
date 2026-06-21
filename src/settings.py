@@ -15,10 +15,12 @@ class Settings:
         self.max_world_speed = MAX_WORLD_SPEED
         self.min_world_speed = MIN_WORLD_SPEED
 
-        self.acceleration_smoothing = ACCELERATION_SMOOTHING  # плавность разгона
-        self.deceleration_smoothing = DECELERATION_SMOOTHING  # плавность торможения
+        # Плавность разгона и торможения
+        self.acceleration_smoothing = ACCELERATION_SMOOTHING
+        self.deceleration_smoothing = DECELERATION_SMOOTHING
 
-        self.max_player_offset_y = MAX_PLAYER_OFFSET_Y  # смещение по OY при разгоне
+        # Смещение по OY при разгоне
+        self.max_player_offset_y = MAX_PLAYER_OFFSET_Y
 
 
 settings = Settings()

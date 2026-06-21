@@ -13,12 +13,12 @@ class ScoreTracker:
 
     @score.setter
     def score(self, value):
-        """Установка счёта с проверкой рекорда."""
+        """Установка счёта."""
         self._score = max(0, value)  # счёт не может быть отрицательным
         self._check_best_score()
 
     def _check_best_score(self):
-        """Проверка и обновление рекорда."""
+        """Обновление рекорда."""
         if self._score > ScoreTracker.best_score:
             ScoreTracker.best_score = self._score
 

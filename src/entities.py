@@ -4,13 +4,29 @@ import random
 from button import create_buttons
 from settings import settings
 from constants import (
-    ASSETS, WIDTH, HEIGHT, ROAD_SPEED,
-    PLAYER_HITBOX_DECREASE, PLAYER_OFFSET_X,
-    START_Y_POS_PLAYER, ROAD_LEFT_BORDER, ROAD_RIGHT_BORDER,
-    ENEMY_HITBOX_DECREASE, ENEMY_OFFSET_X, LANE_POSITIONS,
-    HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT, HEALTH_BAR_X,
-    HEALTH_BAR_Y, HEALTH_BAR_BORDER,
-    WHITE, BLACK, GREEN, YELLOW, RED
+    ASSETS,
+    WIDTH,
+    HEIGHT,
+    ROAD_SPEED,
+    PLAYER_HITBOX_DECREASE,
+    PLAYER_OFFSET_X,
+    BUTTON_SPACING,
+    START_Y_POS_PLAYER,
+    ROAD_LEFT_BORDER,
+    ROAD_RIGHT_BORDER,
+    ENEMY_HITBOX_DECREASE,
+    ENEMY_OFFSET_X,
+    LANE_POSITIONS,
+    HEALTH_BAR_WIDTH,
+    HEALTH_BAR_HEIGHT,
+    HEALTH_BAR_X,
+    HEALTH_BAR_Y,
+    HEALTH_BAR_BORDER,
+    WHITE,
+    BLACK,
+    GREEN,
+    YELLOW,
+    RED,
 )
 
 
@@ -33,7 +49,9 @@ class Car:
         self.rect = self.image.get_rect()
         self.hitbox = self.rect.inflate(*hitbox_decrease)  # уменьшаем хитбокс
 
-        self.offset_x = offset_x  # смещение по оси OX для правки отображения в дебаг-режиме
+        self.offset_x = (
+            offset_x  # смещение по оси OX для правки отображения в дебаг-режиме
+        )
 
         self.speed = 0
 
@@ -47,6 +65,7 @@ class Car:
 
 class Player(Car):
     """Машина игрока."""
+
     def __init__(self):
         super().__init__(
             ASSETS["player_car"], 0.35, 0.35, PLAYER_HITBOX_DECREASE, PLAYER_OFFSET_X
@@ -103,6 +122,7 @@ class Player(Car):
 
 class Enemy(Car):
     """Машина врага."""
+
     def __init__(self):
         super().__init__(
             ASSETS["enemy_car"], 0.45, 0.35, ENEMY_HITBOX_DECREASE, ENEMY_OFFSET_X
@@ -155,6 +175,7 @@ class Enemy(Car):
 
 class Road:
     """Дорога."""
+
     def __init__(self):
         self.image = pygame.image.load(ASSETS["road"])
         self.rect = self.image.get_rect()
@@ -181,6 +202,7 @@ class Road:
 
 class Bonus:
     """Бонус."""
+
     scale_x = 0.3
     scale_y = 0.3
 
@@ -188,7 +210,10 @@ class Bonus:
         self.image = pygame.image.load(image_path)
         self.image = pygame.transform.smoothscale(
             self.image,
-            (int(self.image.get_width() * self.scale_x), int(self.image.get_height() * self.scale_y))
+            (
+                int(self.image.get_width() * self.scale_x),
+                int(self.image.get_height() * self.scale_y),
+            ),
         )
 
         self.rect = self.image.get_rect()
@@ -263,7 +288,6 @@ class Overlay:
     PANEL_WIDTH = 500
     PANEL_HEIGHT = 400
     OVERLAY_ALPHA = 150
-    BUTTON_SPACING = 100  # расстояние между кнопками по Y
     FIRST_BUTTON_Y = 330
 
     def __init__(self, title, button_configs):
@@ -288,7 +312,7 @@ class Overlay:
 
     def _create_button(self, button_configs):
         for i, (text, action_name) in enumerate(button_configs):
-            y_pos = self.FIRST_BUTTON_Y + i * self.BUTTON_SPACING
+            y_pos = self.FIRST_BUTTON_Y + i * BUTTON_SPACING
             button = create_buttons(text, y_pos, "green")
             self.buttons.append(button)
             self.button_actions[button] = action_name

@@ -1,10 +1,11 @@
+from save_manager import SaveManager
+
 class ScoreTracker:
     """Очки и рекорды."""
-
-    best_score = 0
-
     def __init__(self):
         self._score = 0
+
+        self.best_score = SaveManager.get_best_score()
 
     @property
     def score(self):
@@ -19,8 +20,9 @@ class ScoreTracker:
 
     def _check_best_score(self):
         """Обновление рекорда."""
-        if self._score > ScoreTracker.best_score:
-            ScoreTracker.best_score = self._score
+        if self._score > self.best_score:
+            self.best_score = self._score
+            SaveManager.set_best_score(self._score)
 
     def add_score(self, points):
         """Добавление очков."""
@@ -30,7 +32,6 @@ class ScoreTracker:
         """Сброс текущего счёта."""
         self._score = 0
 
-    @classmethod
     def get_best_score(cls):
         """Получение рекорда."""
         return cls.best_score

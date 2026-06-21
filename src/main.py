@@ -382,7 +382,7 @@ class GameManager:
     def draw_score(self):
         text = self.font.render(
             (f"Счёт: {self.score_tracker.score}. "
-             f"Рекорд: {ScoreTracker.get_best_score()}"),
+             f"Рекорд: {self.score_tracker.get_best_score()}"),
             True,
             WHITE
         )

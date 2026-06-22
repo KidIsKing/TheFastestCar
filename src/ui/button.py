@@ -1,6 +1,6 @@
 import pygame
 
-from constants import WHITE, ASSETS, WIDTH, BUTTON_WIDTH, BUTTON_HEIGHT
+from config.constants import WHITE, ASSETS, WIDTH, BUTTON_WIDTH, BUTTON_HEIGHT
 
 
 class ImageButton:

@@ -1,4 +1,5 @@
-from save_manager import SaveManager
+from config.save_manager import SaveManager
+
 
 class ScoreTracker:
     """Очки и рекорды."""

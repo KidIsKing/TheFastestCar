@@ -5,7 +5,7 @@ from pathlib import Path
 class SaveManager:
     """Сохранение прогресса в JSON-файл."""
 
-    SAVE_FILE = Path("save_data/save_data.json")
+    SAVE_FILE = Path("save_data.json")
 
     KEY_BEST_SCORE = "best_score"
 

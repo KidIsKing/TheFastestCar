@@ -1,11 +1,11 @@
 import pygame
 import sys
 
-from base_manager import BaseManager
-from game_manager import GameManager
-from settings import settings
-from button import create_buttons
-from constants import (
+from core.base_manager import BaseManager
+from core.game_manager import GameManager
+from config.settings import settings
+from ui.button import create_buttons
+from config.constants import (
     WIDTH, HEIGHT, FPS, FADE_SPEED, WHITE, BLACK,
     ASSETS, Y_BUTTON, BUTTON_SPACING, MAX_FADE_ALPHA,
 )

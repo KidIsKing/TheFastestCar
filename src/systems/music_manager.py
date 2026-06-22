@@ -1,5 +1,5 @@
 import pygame
-from constants import ASSETS
+from config.constants import ASSETS
 
 
 class LoopingSound:

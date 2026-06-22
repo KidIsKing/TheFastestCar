@@ -1,4 +1,4 @@
-from constants import (
+from config.constants import (
     BASE_WORLD_SPEED, MAX_WORLD_SPEED, MIN_WORLD_SPEED,
     ACCELERATION_SMOOTHING, DECELERATION_SMOOTHING, MAX_PLAYER_OFFSET_Y
 )

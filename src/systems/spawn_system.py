@@ -1,5 +1,5 @@
-from entities import Bonus
-from constants import MAX_BONUSES_ON_SCREEN, ASSETS
+from entities.bonus import Bonus
+from config.constants import MAX_BONUSES_ON_SCREEN, ASSETS
 
 
 def check_bonus_spawn(bonus_director, player, current_world_speed, bonuses):

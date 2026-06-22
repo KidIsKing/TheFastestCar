@@ -1,4 +1,4 @@
-from constants import ENEMY_MIN_GAP
+from config.constants import ENEMY_MIN_GAP
 
 
 def aabb_collide(hitbox1, hitbox2):

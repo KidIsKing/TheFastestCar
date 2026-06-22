@@ -1,6 +1,6 @@
 import pygame
-from constants import WIDTH, HEIGHT
-from menu_manager import MenuManager
+from config.constants import WIDTH, HEIGHT
+from core.menu_manager import MenuManager
 
 
 def main():

@@ -1,19 +1,22 @@
 import pygame
 import random
 
-from base_manager import BaseManager
-from entities import Player, Enemy, Road, Bonus, FloatingText, Overlay, HealthBar
-from bonus_director import BonusDirector
-from score_tracker import ScoreTracker
-from music_manager import MusicManager
-from settings import settings
-from collision import check_enemies_collision, aabb_collide
-from spawn_system import check_bonus_spawn
-from constants import (
-    WIDTH, HEIGHT, FPS, PLAYER_MAX_HEALTH, PLAYER_INVULNERABLE_DURATION,
-    BASE_DAMAGE, DAMAGE_SPREAD, DAMAGE_MIN, DAMAGE_MAX, WHITE, BLACK, GREEN,
-    RED, YELLOW, ASSETS, SPAWN_CHECK_INTERVAL, OFFSET_X_FLOATING_TEXT,
-    OFFSET_Y_FLOATING_TEXT, POSITION_X_FOR_STAT, POSITION_Y_FOR_STAT, DEBAG_BORDER
+from core.base_manager import BaseManager
+from entities.player import Player
+from entities.enemy import Enemy
+from entities.road import Road
+from entities.ui_elements import FloatingText, Overlay, HealthBar
+from systems.bonus_director import BonusDirector
+from systems.score_tracker import ScoreTracker
+from systems.music_manager import MusicManager
+from config.settings import settings
+from systems.collision import check_enemies_collision, aabb_collide
+from systems.spawn_system import check_bonus_spawn
+from config.constants import (
+    PLAYER_MAX_HEALTH, PLAYER_INVULNERABLE_DURATION, DEBAG_BORDER,
+    BASE_DAMAGE, DAMAGE_SPREAD, DAMAGE_MIN, DAMAGE_MAX, WHITE, GREEN,
+    RED, YELLOW, SPAWN_CHECK_INTERVAL, OFFSET_X_FLOATING_TEXT,
+    OFFSET_Y_FLOATING_TEXT, POSITION_X_FOR_STAT, POSITION_Y_FOR_STAT
 )
 
 

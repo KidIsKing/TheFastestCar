@@ -99,9 +99,22 @@ class GameManager(BaseManager):
                 self.music_manager.stop_all()
             return
 
+        if event.type == pygame.KEYDOWN:
+            if event.key in (pygame.K_w, pygame.K_UP):
+                self.music_manager.stop_decel()
+            elif event.key in (pygame.K_s, pygame.K_DOWN):
+                self.music_manager.play_decel()
+
+        if event.type == pygame.KEYUP:
+            if event.key in (pygame.K_w, pygame.K_UP):
+                self.music_manager.play_decel()
+            elif event.key in (pygame.K_s, pygame.K_DOWN):
+                self.music_manager.stop_decel()
+
         # Запуск окошка паузы при нажатии ESC
         if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
             self.game_pause = True
+            self.music_manager.stop_decel()
             self.update_time()
             self.music_manager.toggle_pause_all()
             return
@@ -154,6 +167,7 @@ class GameManager(BaseManager):
             self.collided_enemy = enemy
             self.music_manager.stop_music()
             self.music_manager.stop_engine()
+            self.music_manager.stop_decel()
             self.music_manager.play_crash()
         else:
             self.music_manager.play_damage()

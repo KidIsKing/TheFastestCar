@@ -43,15 +43,18 @@ class MusicManager:
     BONUS_CHANNEL_ID = 3
     DAMAGE_CHANNEL_ID = 4
     CRASH_CHANNEL_ID = 5
+    DECEL_CHANNEL_ID = 6
 
     # Громкости по умолчанию
-    MUSIC_VOLUME = 0.1
-    ENGINE_VOLUME = 10
+    MUSIC_VOLUME = 0.2
+    ENGINE_VOLUME = 1
     BONUS_VOLUME = 0.25
     DAMAGE_VOLUME = 0.15
     CRASH_VOLUME = 0.35
+    DECEL_VOLUME = 0.2
 
     def __init__(self):
+        pygame.mixer.set_num_channels(8)
         self.is_music_playing = False
         self.is_music_paused = False
         pygame.mixer.music.load(ASSETS["music"])
@@ -71,6 +74,10 @@ class MusicManager:
 
         self.crash_sound = pygame.mixer.Sound(ASSETS["car_crash_sound"])
         self.crash_sound.set_volume(self.CRASH_VOLUME)
+
+        self.decel_sound = pygame.mixer.Sound(ASSETS["brake_sound"])
+        self.decel_channel = pygame.mixer.Channel(self.DECEL_CHANNEL_ID)
+        self.decel_sound.set_volume(self.DECEL_VOLUME)
 
         self.is_all_paused = False
 
@@ -135,17 +142,29 @@ class MusicManager:
         """Звук аварии."""
         pygame.mixer.Channel(self.CRASH_CHANNEL_ID).play(self.crash_sound)
 
+    def play_decel(self):
+        """Проигрывает звук понижения оборотов один раз."""
+        # Если звук уже играет, он автоматически прервётся и начнётся заново
+        self.decel_channel.play(self.decel_sound, loops=0)
+
+    def stop_decel(self):
+        """Прерывает звук понижения оборотов."""
+        self.decel_channel.stop()
+
     def toggle_pause_all(self):
         if self.is_all_paused:
             self.unpause_music()
             self.engine.unpause()
+            self.decel_channel.unpause()
             self.is_all_paused = False
         else:
             self.pause_music()
             self.engine.pause()
+            self.decel_channel.pause()
             self.is_all_paused = True
 
     def stop_all(self):
         self.stop_music()
         self.engine.stop()
+        self.stop_decel()
         self.is_all_paused = False

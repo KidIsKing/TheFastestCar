@@ -2,7 +2,7 @@
 
 ### **Бесконечная езда по шоссе с видом сверху.**
 
-![Фото с демкой игры](assets/images/TheFastestCar_demo.jpg)
+![Фото с демкой игры](assets/images/TheFastestCar_demo.png)
 
 ## История создания
 

@@ -32,13 +32,13 @@ class SaveManager:
 
     @classmethod
     def get_best_score(cls):
-        """Выгрузка рекорда из файла."""
+        """Загрузка файла в игру."""
         data = cls.load()
         return data.get(cls.KEY_BEST_SCORE, 0)
 
     @classmethod
     def set_best_score(cls, score):
-        """Загрузка файла в игру."""
+        """Выгрузка рекорда из файла."""
         data = cls.load()
         data[cls.KEY_BEST_SCORE] = score
         cls.save(data)

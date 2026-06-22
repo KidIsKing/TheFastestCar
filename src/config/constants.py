@@ -77,6 +77,7 @@ BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
 YELLOW = (255, 255, 0)
+GREY = (50, 50, 50)
 
 # Затухание
 FADE_SPEED = 10
@@ -115,7 +116,7 @@ HEALTH_RANGE_FOR_INTERPOLATION = 0.7
 TIME_MULTIPLIER_PER_MINUTE = 0.1
 SPEED_MULTIPLIER_POWER = 2
 
-# Assets
+# Ассеты
 ASSETS_PATH = "assets/"
 ASSETS = {
     # Меню

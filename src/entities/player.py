@@ -63,6 +63,6 @@ class Player(Car):
         self.rect.left = max(self.rect.left, ROAD_LEFT_BORDER)
         self.rect.right = min(self.rect.right, ROAD_RIGHT_BORDER)
 
-        self.rect.y = self.base_y  # управление через GameManager
+        self.rect.y = self.base_y  # управление по OY через GameManager
 
         self.sync_hitbox()

@@ -162,7 +162,6 @@ class MenuManager(BaseManager):
             170,
             center=True
         )
-        # Обработка и отрисовка кнопок
         self.draw_buttons()
 
     def draw_settings_menu(self):
@@ -187,8 +186,6 @@ class MenuManager(BaseManager):
             230,
             center=True
         )
-
-        # Обработка и отрисовка кнопок
         self.draw_buttons()
 
     def draw(self):

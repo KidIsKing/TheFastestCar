@@ -219,6 +219,12 @@ python.exe -m pip install --upgrade pip
 python src/main.py
 ```
 
+6. Тесты
+
+```bash
+pytest tests/ -v
+```
+
 ## Возможные улучшения
 
 - [ ] Автопарк машин с разными характеристиками

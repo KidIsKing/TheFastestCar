@@ -4,7 +4,7 @@ from ui.button import create_buttons
 from config.constants import (
     WIDTH, HEIGHT, BUTTON_SPACING, HEALTH_BAR_WIDTH,
     HEALTH_BAR_HEIGHT, HEALTH_BAR_X, HEALTH_BAR_Y, HEALTH_BAR_BORDER,
-    WHITE, BLACK, GREEN, YELLOW, RED
+    WHITE, BLACK, GREEN, YELLOW, RED, GREY
 )
 
 
@@ -130,7 +130,7 @@ class HealthBar:
         # Фон полоски
         pygame.draw.rect(
             screen,
-            (50, 50, 50),
+            GREY,
             (HEALTH_BAR_X, HEALTH_BAR_Y, HEALTH_BAR_WIDTH, HEALTH_BAR_HEIGHT),
         )
 

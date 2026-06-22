@@ -34,7 +34,7 @@ class Enemy(Car):
             settings.oncoming_traffic_enabled and self.rect.x in LANE_POSITIONS[:2]
         )
 
-        # Выбираем ориентацию картинки
+        # Выбираем скорость и ориентацию картинки
         if self.is_oncoming:
             self.offset_x = ENEMY_OFFSET_X
             self.image = self.image_rotated

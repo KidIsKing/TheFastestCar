@@ -21,7 +21,7 @@ class Bonus:
         )
 
         self.rect = self.image.get_rect()
-        self.hitbox = self.rect.inflate(-10, -10)
+        self.hitbox = self.rect.inflate(0, 0)
         self.speed = 0
 
         self.effects_type = effects_type

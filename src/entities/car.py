@@ -20,9 +20,8 @@ class Car:
         self.rect = self.image.get_rect()
         self.hitbox = self.rect.inflate(*hitbox_decrease)  # уменьшаем хитбокс
 
-        self.offset_x = (
-            offset_x  # смещение по оси OX для правки отображения в дебаг-режиме
-        )
+        # Cмещение по оси OX для правки отображения в дебаг-режиме
+        self.offset_x = offset_x
 
         self.speed = 0
 
@@ -31,4 +30,4 @@ class Car:
         screen.blit(self.image, (draw_x, self.rect.y))
 
     def sync_hitbox(self):
-        self.hitbox.center = self.rect.center  # синхронизируем картинку и её хитбокс
+        self.hitbox.center = self.rect.center

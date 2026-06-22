@@ -38,9 +38,6 @@ class MenuManager:
         self.first_font = pygame.font.SysFont(None, 72)
         self.second_font = pygame.font.SysFont(None, 40)
 
-        self.music_manager = MusicManager()
-        self.music_manager.start_music()
-
         # Переменные для затухания
         self.transition_state = None  # None, "fade_out", "fade_in"
         self.target_window = None  # целевое окно после затухания
@@ -198,9 +195,7 @@ class MenuManager:
 
             if self.window == "game":
                 if self.game_manager is None:
-                    self.game_manager = GameManager(
-                        self.screen, self.music_manager
-                    )
+                    self.game_manager = GameManager(self.screen)
                 elif not self.game_manager.running:
                     if self.transition_state is None:
                         self.start_transition("menu")
@@ -241,9 +236,10 @@ class MenuManager:
 
 class GameManager:
     """Менеджер игры."""
-    def __init__(self, screen, music_manager):
+    def __init__(self, screen):
         self.screen = screen
-        self.music_manager = music_manager
+        self.music_manager = MusicManager()
+        self.music_manager.start_music()
 
         self.road = Road()
         self.player = Player()
@@ -323,6 +319,7 @@ class GameManager:
                 self.music_manager.toggle_pause_all()
             elif action == "to_menu":
                 self.running = False
+                self.music_manager.stop_all()
             return
 
         # Запуск окошка паузы при нажатии ESC
@@ -359,6 +356,7 @@ class GameManager:
         self.player_visual_offset_y = 0
         self.game_over = False
 
+        self.music_manager.start_music()
         self.time_alive_ms = 0
         self.update_time()
 
@@ -385,6 +383,8 @@ class GameManager:
         if self.player.health <= 0:
             self.game_over = True
             self.collided_enemy = enemy
+            self.music_manager.stop_music()
+            self.music_manager.stop_engine()
             self.music_manager.play_crash()
         else:
             self.music_manager.play_damage()
@@ -546,24 +546,21 @@ class GameManager:
 
         self.time_alive_ms += dt
 
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_UP] or keys[pygame.K_w]:
-            self.music_manager.start_engine()
-        else:
-            self.music_manager.stop_engine()
-
-        # Громкость двигателя зависит от текущей скорости
-        speed_range = settings.max_world_speed - settings.min_world_speed
-        if speed_range > 0:
-            speed_ratio = (
-                (self.current_world_speed - settings.min_world_speed) / speed_range
-            )
-            self.music_manager.update_engine_volume(speed_ratio)
-
         self.player.update_invulnerable()
 
         self._update_world_speed()
         self._update_player_visual_offset()
+
+        keys = pygame.key.get_pressed()
+        is_accelerating = keys[pygame.K_UP] or keys[pygame.K_w]
+
+        speed_range = settings.max_world_speed - settings.base_world_speed
+        if speed_range > 0:
+            speed_ratio = (self.current_world_speed - settings.base_world_speed) / speed_range
+        else:
+            speed_ratio = 0
+
+        self.music_manager.update_engine(is_accelerating, speed_ratio)
 
         self.spawn_check_counter += 1
         if self.spawn_check_counter >= self.spawn_check_interval:

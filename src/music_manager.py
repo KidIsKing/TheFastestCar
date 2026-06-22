@@ -115,6 +115,14 @@ class MusicManager:
         volume = 0.15 + speed_ratio * 0.45
         self.engine.set_volume(volume)
 
+    def update_engine(self, is_accelerating, speed_ratio):
+        """Обновление состояния двигателя."""
+        if is_accelerating:
+            self.start_engine()
+            self.update_engine_volume(speed_ratio)
+        else:
+            self.stop_engine()
+
     def play_bonus(self):
         """Звук подбора бонуса."""
         pygame.mixer.Channel(self.BONUS_CHANNEL_ID).play(self.bonus_sound)

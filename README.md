@@ -22,7 +22,7 @@
 
 Так я совместила в моей игре лучшее, что помню с этих двух хорошо знакомых мне игр. Получилось реализовать что-то среднее.
 
-![TheFastestCar демо](assets/images/background_menu.png)
+![TheFastestCar задник](assets/images/background_menu.png)
 
 ## Описание
 
@@ -36,7 +36,9 @@
 - Система рекордов с сохранением в JSON-файл
 - Настраиваемый режим «встречки» (oncoming traffic)
 
-...скриншоты будут тут...
+![Скрин 1](assets/images/screenshot_1.png)
+![Скрин 2](assets/images/screenshot_2.png)
+![Скрин 3](assets/images/screenshot_3.png)
 
 ### Управление
 | Клавиша | Действие |
@@ -231,7 +233,7 @@ python src/main.py
 ## Автор
 
 **Яна Масалова**:
-- anulamasalova@gamil.com
+- anulamasalova@gmail.com
 - @KidIsKing
 - vk.com/kidisking
 

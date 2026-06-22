@@ -120,6 +120,7 @@ ASSETS_PATH = "assets/"
 ASSETS = {
     # Меню
     "main_background": ASSETS_PATH + "images/background_menu.png",
+    "icon": ASSETS_PATH + "images/icon.png",
     "green_button": ASSETS_PATH + "images/buttons/green_button.png",
     "green_button_hover": ASSETS_PATH + "images/buttons/green_button_hover.png",
     "red_button": ASSETS_PATH + "images/buttons/red_button.png",

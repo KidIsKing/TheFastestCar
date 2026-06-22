@@ -119,12 +119,23 @@ class MenuManager(BaseManager):
     def draw_background(self, background):
         """Базовая отрисовка фона"""
         self.screen.fill(BLACK)
-        self.screen.blit(background, (-350, -100))
+        background = pygame.transform.smoothscale(
+            background,
+            (
+                int(background.get_width() * 1.2),
+                int(background.get_height() * 1.2),
+            ),
+        )
+        self.screen.blit(background, (-50, 0))
 
-    def draw_text(self, text, font, color, x_pos, y_pos):
+    def draw_text(self, text, font, color, x_pos, y_pos, center=False):
         """Отрисовка текста."""
         text_surface = font.render(text, True, color)
-        self.screen.blit(text_surface, (x_pos, y_pos))
+        if center:
+            text_rect = text_surface.get_rect(centerx=x_pos, y=y_pos)
+        else:
+            text_rect = text_surface.get_rect(topleft=(x_pos, y_pos))
+        self.screen.blit(text_surface, text_rect)
 
     def draw_buttons(self):
         "Базовая отрисовка кнопок."
@@ -136,17 +147,20 @@ class MenuManager(BaseManager):
         """Отрисовка главного меню."""
         self.draw_background(self.main_background)
         self.draw_text(
-            "TheFastestCar. Главное меню",
+            "TheFastestCar.",
             self.first_font,
             WHITE,
-            168,
-            110)
+            WIDTH // 2,
+            110,
+            center=True
+        )
         self.draw_text(
             "Игра для экзамена по программированию. by Яна Масалова",
             self.second_font,
             WHITE,
-            130,
+            WIDTH // 2,
             170,
+            center=True
         )
         # Обработка и отрисовка кнопок
         self.draw_buttons()
@@ -154,7 +168,14 @@ class MenuManager(BaseManager):
     def draw_settings_menu(self):
         """Отрисовка меню настроек."""
         self.draw_background(self.main_background)
-        self.draw_text("Настройки", self.first_font, WHITE, 415, 110)
+        self.draw_text(
+            "Настройки",
+            self.first_font,
+            WHITE,
+            WIDTH // 2,
+            110,
+            center=True
+        )
 
         # Показываем текущее состояние встречки
         traffic_status = "ВКЛ" if settings.oncoming_traffic_enabled else "ВЫКЛ"
@@ -162,8 +183,9 @@ class MenuManager(BaseManager):
             f"Встречка: {traffic_status}",
             self.second_font,
             WHITE,
-            440,
-            230
+            WIDTH // 2,
+            230,
+            center=True
         )
 
         # Обработка и отрисовка кнопок
